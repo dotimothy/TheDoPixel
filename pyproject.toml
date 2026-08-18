@@ -1,0 +1,45 @@
+[project]
+name = "pixel-relay"
+version = "0.1.0"
+description = "TheDoPixel safe local Google Photos media appliance"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "argon2-cffi>=23.1,<26",
+  "fastapi>=0.115,<1",
+  "filelock>=3.16,<4",
+  "httpx>=0.28,<1",
+  "prometheus-client>=0.21,<1",
+  "pydantic-settings>=2.7,<3",
+  "python-multipart>=0.0.20,<1",
+  "typer>=0.15,<1",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.25,<1",
+  "ruff>=0.9,<1",
+]
+
+[project.scripts]
+pixel-relay-cli = "pixel_relay.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend/pixel_relay"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

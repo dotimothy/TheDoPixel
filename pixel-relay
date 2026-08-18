@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ "$#" -eq 0 ]; then
+  set -- serve
+fi
+
+command -v uv >/dev/null 2>&1 || {
+  printf 'ERROR: uv is required. Install it from https://docs.astral.sh/uv/\n' >&2
+  exit 1
+}
+
+build_ui() {
+  command -v npm >/dev/null 2>&1 || {
+    printf 'ERROR: Node.js/npm is required to build the dashboard.\n' >&2
+    exit 1
+  }
+  if [ -f "$PROJECT_DIR/frontend/package-lock.json" ]; then
+    npm --prefix "$PROJECT_DIR/frontend" ci
+  else
+    npm --prefix "$PROJECT_DIR/frontend" install
+  fi
+  npm --prefix "$PROJECT_DIR/frontend" run build
+}
+
+case "${1:-serve}" in
+  build-ui)
+    build_ui
+    ;;
+  serve)
+    if [ ! -f "$PROJECT_DIR/frontend/dist/index.html" ]; then
+      build_ui
+    fi
+    cd "$PROJECT_DIR"
+    exec uv run --project "$PROJECT_DIR" pixel-relay-cli "$@"
+    ;;
+  *)
+    cd "$PROJECT_DIR"
+    exec uv run --project "$PROJECT_DIR" pixel-relay-cli "$@"
+    ;;
+esac
