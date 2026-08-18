@@ -47,6 +47,7 @@ def test_unreadable_source_reports_issue_and_scan_fails_visibly(
         return real_scandir(path)
 
     monkeypatch.setattr(repository_module.os, "scandir", permission_blocked)
+    monkeypatch.setattr(repository_module.sys, "platform", "darwin")
 
     listed = repository.list_roots()[0]
     assert listed["available"] is False

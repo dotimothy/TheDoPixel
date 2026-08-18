@@ -155,13 +155,21 @@ class Repository:
             with os.scandir(path) as entries:
                 next(entries, None)
         except PermissionError:
-            guidance = (
-                "On macOS, grant Removable Volumes or Full Disk Access to the terminal "
-                "or tmux process running Pixel Relay, then restart Pixel Relay."
-                if sys.platform == "darwin"
-                else "Grant the Windows account running Pixel Relay read access to the "
-                "folder or network share, then scan again."
-            )
+            if sys.platform == "darwin":
+                guidance = (
+                    "On macOS, grant Removable Volumes or Full Disk Access to the terminal "
+                    "or tmux process running Pixel Relay, then restart Pixel Relay."
+                )
+            elif sys.platform == "win32":
+                guidance = (
+                    "Grant the Windows account running Pixel Relay read access to the "
+                    "folder or network share, then scan again."
+                )
+            else:
+                guidance = (
+                    "Grant the service account read and directory traversal access to the "
+                    "folder or mounted share, then scan again."
+                )
             return (
                 False,
                 "permission_denied",
