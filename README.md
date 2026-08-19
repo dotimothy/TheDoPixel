@@ -39,16 +39,27 @@ the repository's `data` folder unless `PIXEL_RELAY_IMPORT_ROOT` is configured.
 
 ## macOS and Linux
 
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/), Node.js LTS,
-and Android Platform Tools, then run:
+Run the cross-platform installer from the cloned project folder:
 
 ```bash
-chmod +x pixel-relay
-./pixel-relay
+chmod +x install-unix.sh
+./install-unix.sh
 ```
 
-The launcher installs locked Python dependencies, builds the dashboard when needed,
-starts the API and worker, and opens `http://127.0.0.1:8741`.
+On macOS it uses Homebrew, installing Homebrew first when necessary. On Linux it
+supports apt, dnf, yum, pacman, zypper, and apk. Missing `uv`, Node.js/npm, and
+Android Platform Tools are installed before the locked Python environment and
+dashboard are built.
+
+Use `--skip-adb` for an FTP-only appliance or `--no-start` to install without
+starting the service:
+
+```bash
+./install-unix.sh --skip-adb --no-start
+```
+
+After installation, start TheDoPixel with `./pixel-relay`. The first start prompts
+you to create the local administrator and opens `http://127.0.0.1:8741`.
 
 ## Configuration
 
@@ -67,14 +78,22 @@ reverse proxy.
 
 ## Useful commands
 
-On macOS/Linux, replace `.\pixel-relay.cmd` with `./pixel-relay`:
-
 ```powershell
 .\pixel-relay.cmd doctor
 .\pixel-relay.cmd device status
 .\pixel-relay.cmd source list
 .\pixel-relay.cmd backup create
 .\pixel-relay.cmd clean logs
+```
+
+On macOS and Linux, use the same commands through `./pixel-relay`:
+
+```bash
+./pixel-relay doctor
+./pixel-relay device status
+./pixel-relay source list
+./pixel-relay backup create
+./pixel-relay clean logs
 ```
 
 ## Development

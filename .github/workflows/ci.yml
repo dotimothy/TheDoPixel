@@ -5,6 +5,16 @@ on:
   pull_request:
 
 jobs:
+  unix-installer:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n install-unix.sh pixel-relay
+      - run: bash install-unix.sh --help
+
   backend:
     strategy:
       fail-fast: false
