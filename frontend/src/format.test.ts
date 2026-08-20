@@ -47,6 +47,7 @@ describe("dashboard formatting", () => {
 
   it("shortens long source paths", () => {
     expect(shortPath("/Volumes/NAS/archive/2024/photo.jpg")).toBe("…/archive/2024/photo.jpg");
+    expect(shortPath("E:\\Camera Roll\\archive\\2024\\photo.jpg")).toBe("…/archive/2024/photo.jpg");
   });
 
   it("uses the containing folder as the default archive name", () => {

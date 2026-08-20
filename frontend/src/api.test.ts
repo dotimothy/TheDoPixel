@@ -116,4 +116,34 @@ describe("storage adoption API", () => {
       acknowledgement: "DELETE PIXEL RELAY TREE"
     });
   });
+
+  it("lets the server choose the initial source folder for its host OS", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      path: "C:\\Users\\pixel",
+      parent: "C:\\Users",
+      entries: [],
+      shortcuts: []
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.serverDirectories();
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/system/directories");
+  });
+
+  it("preserves a Windows drive path when browsing sources", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      path: "E:\\Camera Roll",
+      parent: "E:\\",
+      entries: [],
+      shortcuts: []
+    }), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.serverDirectories("E:\\Camera Roll");
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/v1/system/directories?path=E%3A%5CCamera%20Roll"
+    );
+  });
 });

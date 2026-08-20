@@ -6,7 +6,8 @@ import pytest
 from pixel_relay.auth import AuthService
 from pixel_relay.config import Settings
 from pixel_relay.database import Database
-from pixel_relay.repository import DomainError, Repository
+from pixel_relay.files import normalize_local_path_text, source_path_name
+from pixel_relay.repository import DomainError, Repository, relay_filename
 from pixel_relay.states import ItemState
 
 
@@ -31,6 +32,14 @@ def source_file(repository: Repository, tmp_path: Path):
     media.write_bytes(b"not-a-real-jpeg-but-safe-for-transfer")
     root = repository.add_root("Archive", str(root_path))
     return repository.register_file(media, root["id"]), media
+
+
+def test_windows_source_paths_keep_their_drive_mapping_and_filename() -> None:
+    source = r"/E:/Camera Roll/Sony Alpha A7 IV/IMG_0001.JPG"
+
+    assert normalize_local_path_text(source, windows=True) == source[1:]
+    assert source_path_name(source) == "IMG_0001.JPG"
+    assert relay_filename(source, "a" * 32, set()) == "IMG_0001.JPG"
 
 
 def test_unreadable_source_reports_issue_and_scan_fails_visibly(

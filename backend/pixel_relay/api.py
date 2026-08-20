@@ -46,7 +46,7 @@ from .auth import (
 from .config import Settings, apply_persisted_settings, get_settings
 from .database import Database
 from .events import EventBroker
-from .files import atomic_upload, is_macos_metadata
+from .files import atomic_upload, is_macos_metadata, local_path
 from .models import (
     AdbTcpipRequest,
     BatchCancelRequest,
@@ -74,6 +74,11 @@ logger = logging.getLogger(__name__)
 Authenticated = Annotated[dict, Depends(require_user)]
 MutatingUser = Annotated[dict, Depends(require_csrf)]
 UploadedMedia = Annotated[UploadFile, File()]
+
+
+def default_server_directory() -> Path:
+    volumes = Path("/Volumes")
+    return volumes if sys.platform == "darwin" and volumes.is_dir() else Path.home()
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -1389,10 +1394,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @router.get("/system/directories")
     async def list_server_directories(
         _user: Authenticated,
-        path: str = Query(default="/", min_length=1, max_length=4096),
+        path: str | None = Query(default=None, min_length=1, max_length=4096),
     ) -> dict:
         try:
-            directory = Path(path).expanduser().resolve(strict=True)
+            directory = (
+                local_path(path).expanduser().resolve(strict=True)
+                if path
+                else default_server_directory().resolve(strict=True)
+            )
         except (OSError, RuntimeError) as exc:
             raise DomainError(
                 "directory_not_found",

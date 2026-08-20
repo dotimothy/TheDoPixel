@@ -16,7 +16,7 @@ from typing import Any
 
 from .config import Settings
 from .database import Database, utcnow
-from .files import is_macos_metadata, resolve_inside, sha256_file
+from .files import is_macos_metadata, local_path, resolve_inside, sha256_file, source_path_name
 from .states import ItemState, can_transition
 
 logger = logging.getLogger(__name__)
@@ -31,12 +31,12 @@ class DomainError(ValueError):
 
 def relay_filename(source_path: str, item_id: str, used_names: set[str]) -> str:
     """Keep the source basename while remaining safe on both supported transports."""
-    source = Path(source_path)
-    original_name = source.name
+    original_name = source_path_name(source_path)
 
     # Browser uploads are stored with an internal collision-prevention prefix.
     # That prefix is an implementation detail and must not reach Google Photos.
-    if source.parent.name == "pixel-relay-imports":
+    parent_parts = [part for part in re.split(r"[/\\]+", source_path) if part]
+    if len(parent_parts) > 1 and parent_parts[-2] == "pixel-relay-imports":
         uploaded_name = re.fullmatch(r"[a-fA-F0-9]{32}-(.+)", original_name)
         if uploaded_name:
             original_name = uploaded_name.group(1)
@@ -89,7 +89,7 @@ def split_batch_files(
         if file["size"] > max_bytes:
             raise DomainError(
                 "batch_too_large",
-                f"{Path(file['path']).name} exceeds the available per-batch storage",
+                f"{source_path_name(file['path'])} exceeds the available per-batch storage",
             )
 
     minimum_batches = max(
@@ -183,7 +183,7 @@ class Repository:
     def list_roots(self) -> list[dict[str, Any]]:
         roots = self.db.fetchall("SELECT * FROM source_roots WHERE enabled=1 ORDER BY name")
         for root in roots:
-            available, issue_code, issue = self._root_access_status(Path(root["path"]))
+            available, issue_code, issue = self._root_access_status(local_path(root["path"]))
             root["available"] = available
             root["issue_code"] = issue_code
             root["issue"] = issue
@@ -192,7 +192,7 @@ class Repository:
 
     def add_root(self, name: str, path_value: str) -> dict[str, Any]:
         try:
-            path = Path(path_value).expanduser().resolve(strict=True)
+            path = local_path(path_value).expanduser().resolve(strict=True)
         except (FileNotFoundError, OSError) as exc:
             raise DomainError(
                 "root_not_found",
@@ -273,7 +273,7 @@ class Repository:
         root = self.db.fetchone("SELECT * FROM source_roots WHERE id = ?", (root_id,))
         if not root or not root["enabled"]:
             raise DomainError("root_not_found", "Source root was not found", status_code=404)
-        resolved = resolve_inside(path, Path(root["path"]))
+        resolved = resolve_inside(local_path(path), local_path(root["path"]))
         if not resolved.is_file():
             raise DomainError("not_a_file", f"Not a regular file: {resolved}")
         if is_macos_metadata(resolved):
@@ -356,7 +356,7 @@ class Repository:
         root = self.db.fetchone("SELECT * FROM source_roots WHERE id = ?", (root_id,))
         if not root or not root["enabled"]:
             raise DomainError("root_not_found", "Source root was not found", status_code=404)
-        root_path = Path(root["path"])
+        root_path = local_path(root["path"])
         available, issue_code, issue = self._root_access_status(root_path)
         if not available:
             raise DomainError(
@@ -367,7 +367,7 @@ class Repository:
                 status_code=403 if issue_code == "permission_denied" else 409,
             )
         scan_targets = (
-            [resolve_inside(Path(raw), root_path) for raw in selected_paths]
+            [resolve_inside(local_path(raw), root_path) for raw in selected_paths]
             if selected_paths
             else [root_path]
         )
@@ -680,7 +680,7 @@ class Repository:
 
         folder_files: dict[Path, list[dict[str, Any]]] = {}
         for file in unique_content:
-            folder_files.setdefault(Path(file["path"]).parent, []).append(file)
+            folder_files.setdefault(local_path(file["path"]).parent, []).append(file)
 
         batch_byte_limit = min(
             self.settings.max_batch_bytes,

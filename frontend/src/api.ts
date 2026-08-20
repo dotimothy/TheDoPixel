@@ -227,8 +227,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ acknowledgement: "DELETE PIXEL RELAY TREE" })
     }),
-  serverDirectories: (path = "/") =>
-    request<ServerDirectoryListing>(`/system/directories?path=${encodeURIComponent(path)}`),
+  serverDirectories: (path?: string) =>
+    request<ServerDirectoryListing>(
+      `/system/directories${path ? `?path=${encodeURIComponent(path)}` : ""}`
+    ),
   sources: () => request<SourceRoot[]>("/sources"),
   createSource: (name: string, path: string) =>
     request<SourceRoot>("/sources", { method: "POST", body: JSON.stringify({ name, path }) }),

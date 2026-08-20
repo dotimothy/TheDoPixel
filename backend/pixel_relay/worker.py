@@ -4,15 +4,15 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import time
-from pathlib import Path
 
 from prometheus_client import Counter, Gauge
 
-from .adb import AdbError, ChecksumMismatch, DeviceOffline, StorageMissing
+from .adb import AdbError, ChecksumMismatch, DeviceOffline, SourceUnavailable, StorageMissing
 from .database import Database, utcnow
 from .events import EventBroker
-from .files import sha256_file
+from .files import local_path, sha256_file, source_path_name
 from .repository import DomainError, Repository
 from .states import ItemState
 from .transport import DeviceTransport
@@ -329,9 +329,14 @@ class RelayWorker:
                 and snapshot.storage_free_bytes - item["size"] < reserve
             ):
                 raise StorageMissing("Insufficient Pixel free space after safety reserve")
-            source = Path(item["path"])
+            source = local_path(item["path"])
             if not source.is_file():
-                raise AdbError("Source file is unavailable")
+                hint = (
+                    " Reconnect the drive with the same drive letter, then rescan the source."
+                    if os.name == "nt"
+                    else " Reconnect or remount the source drive, then rescan the source."
+                )
+                raise SourceUnavailable(f"Source file cannot be found: {item['path']}.{hint}")
             if source.stat().st_size != item["size"] or sha256_file(source) != item["sha256"]:
                 raise ChecksumMismatch("Source file changed after batch creation")
             if await self._stop_if_cancelled(item, pixel_copy_possible=False):
@@ -624,7 +629,7 @@ class RelayWorker:
                     "batch_id": item["batch_id"],
                     "item_id": item["id"],
                     "media_kind": item.get("media_kind"),
-                    "source_name": Path(item["path"]).name,
+                    "source_name": source_path_name(item["path"]),
                     "remote_path": item.get("remote_path"),
                     "item_size_bytes": item.get("size"),
                     "ready_items": ready,

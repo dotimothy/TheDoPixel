@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
+from pixel_relay import api as api_module
 from pixel_relay import config as config_module
 from pixel_relay.api import create_app
 from pixel_relay.auth import AuthService
@@ -208,6 +209,23 @@ def test_authenticated_clients_can_browse_server_directories(tmp_path: Path) -> 
         assert payload["parent"] == str(tmp_path.parent.resolve())
         assert {"name": visible.name, "path": str(visible)} in payload["entries"]
         assert all(entry["name"] != "not-a-folder.jpg" for entry in payload["entries"])
+
+
+def test_directory_browser_uses_host_default_without_a_macos_path(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(api_module, "default_server_directory", lambda: tmp_path)
+    app = configured_app(tmp_path)
+
+    with TestClient(app) as client:
+        client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "a secure local password"},
+        )
+        response = client.get("/api/v1/system/directories")
+
+    assert response.status_code == 200
+    assert response.json()["path"] == str(tmp_path.resolve())
 
 
 def test_source_can_be_removed_without_deleting_folder(tmp_path: Path) -> None:

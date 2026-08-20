@@ -1810,7 +1810,7 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
       <div className="page-heading"><div><div className="page-kicker">MEDIA SOURCES</div><h1>Sources <span>& imports</span></h1><p>Browse folders on the server, or upload media from this browser client.</p></div><button className="primary" onClick={() => fileInput.current?.click()}><Icons.upload /> Upload media</button><input ref={fileInput} hidden type="file" accept="image/*,video/*,.dng,.cr2,.cr3,.nef,.nrw,.arw,.srf,.sr2,.raf,.orf,.rw2,.pef,.x3f,.3fr,.erf,.mef,.mos,.mrw,.raw,.rwl,.iiq" multiple onChange={(event) => { const uploads = [...(event.target.files || [])]; void act(async () => { for (const file of uploads) await api.upload(file); }, `${uploads.length} original${uploads.length === 1 ? "" : "s"} imported`); event.target.value = ""; }} /></div>
       <div className="source-grid">
         <section className="panel">
-          <div className="panel-head"><div><span className="panel-kicker">ALLOWLISTED ROOTS</span><h2>Mac & NAS folders</h2></div></div>
+          <div className="panel-head"><div><span className="panel-kicker">ALLOWLISTED ROOTS</span><h2>Host & network folders</h2></div></div>
           <div className="root-list">
             {roots.map((root) => {
               const progress = scanProgress[root.id];
@@ -1873,11 +1873,11 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
                 <button className="danger small" disabled={busy} onClick={() => void removeRoot(root)}>Remove</button>
               </div>;
             })}
-            {!roots.length && <Empty icon="＋" title="No source roots" text="Add a Mac or mounted NAS folder below." />}
+            {!roots.length && <Empty icon="＋" title="No source roots" text="Add a local drive or mounted network folder below." />}
           </div>
           <form className="inline-form" onSubmit={(event) => { event.preventDefault(); void act(async () => { await api.createSource(name.trim() || pathBaseName(path), path); setName(""); setPath(""); }, "Source root added"); }}>
             <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder={pathBaseName(path) || "Family archive"} /></label>
-            <label className="grow">Absolute path<div className="path-picker"><input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/Volumes/NAS/Photos" required /><button type="button" className="secondary small" onClick={() => setServerBrowserOpen(true)}>Browse server…</button></div></label>
+            <label className="grow">Absolute path<div className="path-picker"><input value={path} onChange={(e) => setPath(e.target.value)} placeholder={"E:\\Photos or /Volumes/NAS/Photos"} required /><button type="button" className="secondary small" onClick={() => setServerBrowserOpen(true)}>Browse server…</button></div></label>
             <button className="secondary" disabled={busy}>Add root</button>
           </form>
         </section>
@@ -1956,7 +1956,7 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
       </div>
       {serverBrowserOpen && <ServerDirectoryBrowser
         title="Choose a source folder"
-        initialPath={path || "/Volumes"}
+        initialPath={path}
         close={() => setServerBrowserOpen(false)}
         select={(selectedPath) => {
           setPath(selectedPath);
@@ -2186,7 +2186,7 @@ function Settings({ report }: { report: (message: string, type?: Notice["type"])
             </div>}
           </div>
         </section>
-        <section className="panel setting-card editable-card"><span className="panel-kicker">STORAGE PATHS</span><h2>Pixel and source locations</h2><label>Folder within selected Pixel storage<input value={form.destination_root} onChange={(event) => update("destination_root", event.target.value)} /></label><small className="field-hint">Keep this beneath <code>/sdcard</code>. The storage-medium selector changes what Android mounts at <code>/sdcard</code>, so this folder path does not need to change when switching between phone storage and an adopted drive.</small><div className="storage-buffer-control"><ByteSlider label="Pixel free-space buffer" value={form.reserve_bytes} minimum={0} maximum={form.pixel_internal_storage_bytes || Math.max(1, form.reserve_bytes)} disabled={!form.pixel_internal_storage_bytes} onChange={(value) => update("reserve_bytes", value)} /><small className="field-hint">{form.pixel_internal_storage_bytes ? <>Transfers pause before available Pixel storage falls below this buffer. Maximum: {bytes(form.pixel_internal_storage_bytes)} measured internal storage. The default is 10 GiB.</> : <>Connect and refresh the Pixel to measure internal storage before adjusting this buffer.</>}</small></div><label>TheDoPixel import root<div className="path-picker"><input value={form.import_root || ""} onChange={(event) => update("import_root", event.target.value)} placeholder="Absolute Mac/NAS path for browser imports" /><button type="button" className="secondary small" onClick={() => setServerBrowserOpen(true)}>Browse server…</button></div></label><small className="field-hint">This is a folder on the Mac mini/NAS. Files selected with Upload media come from the browser client and are copied here.</small></section>
+        <section className="panel setting-card editable-card"><span className="panel-kicker">STORAGE PATHS</span><h2>Pixel and source locations</h2><label>Folder within selected Pixel storage<input value={form.destination_root} onChange={(event) => update("destination_root", event.target.value)} /></label><small className="field-hint">Keep this beneath <code>/sdcard</code>. The storage-medium selector changes what Android mounts at <code>/sdcard</code>, so this folder path does not need to change when switching between phone storage and an adopted drive.</small><div className="storage-buffer-control"><ByteSlider label="Pixel free-space buffer" value={form.reserve_bytes} minimum={0} maximum={form.pixel_internal_storage_bytes || Math.max(1, form.reserve_bytes)} disabled={!form.pixel_internal_storage_bytes} onChange={(value) => update("reserve_bytes", value)} /><small className="field-hint">{form.pixel_internal_storage_bytes ? <>Transfers pause before available Pixel storage falls below this buffer. Maximum: {bytes(form.pixel_internal_storage_bytes)} measured internal storage. The default is 10 GiB.</> : <>Connect and refresh the Pixel to measure internal storage before adjusting this buffer.</>}</small></div><label>TheDoPixel import root<div className="path-picker"><input value={form.import_root || ""} onChange={(event) => update("import_root", event.target.value)} placeholder="Absolute local or network path for browser imports" /><button type="button" className="secondary small" onClick={() => setServerBrowserOpen(true)}>Browse server…</button></div></label><small className="field-hint">This is a folder visible to the Pixel Relay host. Files selected with Upload media come from the browser client and are copied here.</small></section>
         <section className="panel setting-card editable-card"><span className="panel-kicker">BATCH GUARDRAILS</span><h2>Transfer limits</h2><div className="editable-grid"><NumericSlider label="Maximum files per batch" value={form.max_batch_files} min={1} max={100000} step={1} format={(value) => value.toLocaleString()} onChange={(value) => update("max_batch_files", value)} /><ByteSlider label="Maximum bytes" value={form.max_batch_bytes} minimum={1} onChange={(value) => update("max_batch_bytes", value)} /></div><small className="field-hint">Pixel Relay also considers current Pixel free space and the safety reserve. Oversized selections are balanced into sequential parts. Once a part is fully staged, the next part can start without Google Photos confirmation if its whole payload fits; otherwise it waits for space. Files from different source folders remain separate batches.</small></section>
         <section className="panel setting-card editable-card"><span className="panel-kicker">THERMAL SAFETY</span><h2>Temperature thresholds</h2><div className="editable-grid"><NumericSlider label="Pause at" value={form.pause_temperature_c} min={30} max={80} step={0.1} format={(value) => `${value.toFixed(1)} °C`} onChange={(value) => update("pause_temperature_c", value)} /><NumericSlider label="Resume below" value={form.resume_temperature_c} min={20} max={75} step={0.1} format={(value) => `${value.toFixed(1)} °C`} onChange={(value) => update("resume_temperature_c", value)} /></div><small className="field-hint">Resume must remain below the pause threshold.</small></section>
         <StorageSelector
@@ -2202,7 +2202,7 @@ function Settings({ report }: { report: (message: string, type?: Notice["type"])
     </form>
     {serverBrowserOpen && <ServerDirectoryBrowser
       title="Choose the import folder"
-      initialPath={form.import_root || "/"}
+      initialPath={form.import_root || ""}
       close={() => setServerBrowserOpen(false)}
       select={(selectedPath) => {
         update("import_root", selectedPath);
@@ -2682,7 +2682,7 @@ function StorageSelector({
         <button type="button" className="drawer-close" disabled={submittingAdoption} onClick={() => closeAdoption()}><Icons.close /></button>
         <span className="panel-kicker">DESTRUCTIVE AND IRREVERSIBLE</span>
         <h2 id="adoption-title">Adopt {adoptionMedium.label || adoptionMedium.disk_id}?</h2>
-        <div className="adoption-warning"><Icons.warning /><div><strong>Every file and partition on this medium will be erased.</strong><small>Android will repartition and encrypt it for this Pixel. A Mac will no longer be able to mount it, and disconnecting adopted USB storage can cause corruption.</small></div></div>
+        <div className="adoption-warning"><Icons.warning /><div><strong>Every file and partition on this medium will be erased.</strong><small>Android will repartition and encrypt it for this Pixel. Other computers will no longer be able to mount it, and disconnecting adopted USB storage can cause corruption.</small></div></div>
         <dl>
           <div><dt>Disk ID</dt><dd><code>{adoptionMedium.disk_id}</code></dd></div>
           <div><dt>Reported capacity</dt><dd>{bytes(adoptionMedium.size_bytes)}</dd></div>
@@ -2827,7 +2827,7 @@ function ServerDirectoryBrowser({
           <div><span className="page-kicker">SERVER FILESYSTEM</span><h2>{title}</h2></div>
           <button type="button" className="drawer-close" onClick={close}><Icons.close /></button>
         </div>
-        <p>Browse folders visible to the Pixel Relay service on the Mac mini or mounted NAS.</p>
+        <p>Browse folders and drives visible to the Pixel Relay service on this host.</p>
         <form className="directory-path" onSubmit={(event) => { event.preventDefault(); void load(pathInput); }}>
           <input value={pathInput} onChange={(event) => setPathInput(event.target.value)} aria-label="Server directory path" />
           <button className="secondary" disabled={loading}>Go</button>

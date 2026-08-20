@@ -157,6 +157,10 @@ class ChecksumMismatch(AdbError):
     code = "checksum_mismatch"
 
 
+class SourceUnavailable(AdbError):
+    code = "source_unavailable"
+
+
 @dataclass(slots=True)
 class CommandResult:
     returncode: int

@@ -63,7 +63,7 @@ export function label(value: string): string {
 }
 
 export function shortPath(path: string): string {
-  const parts = path.split("/");
+  const parts = path.replaceAll("\\", "/").split("/");
   return parts.length > 4 ? `…/${parts.slice(-3).join("/")}` : path;
 }
 

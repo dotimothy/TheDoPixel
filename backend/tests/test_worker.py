@@ -197,6 +197,33 @@ async def test_raw_advances_when_generic_mediastore_query_cannot_find_it(
 
 
 @pytest.mark.asyncio
+async def test_missing_source_reports_exact_mapping_before_adb_push(tmp_path: Path) -> None:
+    settings = Settings(data_dir=tmp_path / "data")
+    settings.prepare()
+    db = Database(settings.database_path)
+    db.migrate()
+    AuthService(db, settings).create_admin("admin", "local")
+    repository = Repository(db, settings)
+    root_path = tmp_path / "detached-drive"
+    root_path.mkdir()
+    photo = root_path / "mapped-photo.jpg"
+    photo.write_bytes(b"source")
+    root = repository.add_root("Mapped drive", str(root_path))
+    record = repository.scan_root(root["id"])["files"][0]
+    batch = repository.create_batch("Missing mapping", [record["id"]], 1)
+    photo.unlink()
+    worker = RelayWorker(db, repository, FakeAdb(), EventBroker())  # type: ignore[arg-type]
+
+    await worker._process(repository.get_item(batch["items"][0]["id"]))  # type: ignore[arg-type]
+
+    item = repository.get_item(batch["items"][0]["id"])
+    assert item and item["state"] == ItemState.TRANSFER_FAILED
+    assert item["error_code"] == "source_unavailable"
+    assert str(photo) in item["error_detail"]
+    assert "rescan the source" in item["error_detail"]
+
+
+@pytest.mark.asyncio
 async def test_cancelled_batch_pixel_copy_can_be_cleaned_up(tmp_path: Path) -> None:
     settings = Settings(data_dir=tmp_path / "data")
     settings.prepare()
