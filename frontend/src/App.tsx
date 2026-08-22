@@ -227,8 +227,10 @@ export default function App() {
     NotificationPermission | "unsupported"
   >("Notification" in window ? Notification.permission : "unsupported");
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
+  const [showQuickStart, setShowQuickStart] = useState(false);
   const readyBatches = useRef<Set<string> | null>(null);
   const stalledBatches = useRef<Set<string> | null>(null);
+  const quickStartChecked = useRef(false);
 
   const refreshDashboard = useCallback(async () => {
     try {
@@ -351,6 +353,16 @@ export default function App() {
       stream.close();
     };
   }, [user, refreshDashboard]);
+
+  useEffect(() => {
+    if (!user || quickStartChecked.current) return;
+    quickStartChecked.current = true;
+    try {
+      setShowQuickStart(localStorage.getItem("pixel-relay-quick-start-seen-v1") !== "true");
+    } catch {
+      setShowQuickStart(true);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (
@@ -478,6 +490,18 @@ export default function App() {
     sessionStorage.setItem("pixel-relay-notification-prompt-dismissed", "true");
     setShowNotificationPrompt(false);
   }
+  function closeQuickStart() {
+    try {
+      localStorage.setItem("pixel-relay-quick-start-seen-v1", "true");
+    } catch {
+      // The guide can still be dismissed when browser storage is disabled.
+    }
+    setShowQuickStart(false);
+  }
+  function continueQuickStart(nextTab: Tab) {
+    closeQuickStart();
+    setTab(nextTab);
+  }
 
   return (
     <div className="app-shell">
@@ -507,6 +531,16 @@ export default function App() {
           <div className="eyebrow">THE DO LAB / THE DO PIXEL</div>
           <div className="top-actions">
             <span className="secure-label">PRIVATE NETWORK</span>
+            <button
+              className="top-action-button guide-button"
+              type="button"
+              aria-label="Open first-time guide"
+              title="Open first-time guide"
+              onClick={() => setShowQuickStart(true)}
+            >
+              <Icons.help />
+              <span>Quick start</span>
+            </button>
             <button
               className={`top-action-button notification-button ${notificationPermission === "granted" ? "enabled" : ""}`}
               type="button"
@@ -562,6 +596,22 @@ export default function App() {
         <p>{notice.message}</p>
         {notice.type === "bad" && <CopyButton text={notice.message} />}
         <button type="button" className="toast-dismiss" aria-label="Dismiss notification" onClick={() => setNotice(null)}>×</button>
+      </div>}
+      {showQuickStart && <div className="quick-start-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeQuickStart()}>
+        <section className="quick-start-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-start-title">
+          <button type="button" className="drawer-close" aria-label="Close first-time guide" onClick={closeQuickStart}><Icons.close /></button>
+          <span className="panel-kicker">FIRST-TIME GUIDE</span>
+          <h2 id="quick-start-title">From source folder to a safe Pixel upload</h2>
+          <p className="quick-start-intro">Follow these five steps. Pixel Relay keeps your source originals and only removes its Pixel copies when you explicitly purge them.</p>
+          <ol className="quick-start-list">
+            <li><b>1</b><div><strong>Connect and unlock the Pixel</strong><span>Enable USB debugging, approve this computer, and unlock with the PIN after every reboot. If you use an adopted drive, connect it before refreshing. The Overview target-storage status should turn green.</span></div></li>
+            <li><b>2</b><div><strong>Choose the connection</strong><span>In Settings, select USB, network ADB, or FTP and save. USB is simplest for a first run; use the connection test before moving a large batch.</span></div></li>
+            <li><b>3</b><div><strong>Add and scan a source</strong><span>Open Sources, choose a folder on this server, and scan it. The service account needs read permission. Photos, RAW files, and videos such as MP4 are included.</span></div></li>
+            <li><b>4</b><div><strong>Create a batch</strong><span>Filter the scan, select the files, name the batch, and create it. Leave the Pixel and any storage drive connected while the queue transfers and scans the media.</span></div></li>
+            <li><b>5</b><div><strong>Verify, then purge</strong><span>When the batch says Ready to verify, confirm that Google Photos finished backing it up. Mark it verified in Batches, then purge the Pixel copies when you want the space back.</span></div></li>
+          </ol>
+          <div className="quick-start-actions"><button type="button" className="secondary" onClick={() => continueQuickStart("settings")}>Open Settings</button><button type="button" className="primary" onClick={() => continueQuickStart("sources")}>Start with Sources</button></div>
+        </section>
       </div>}
       {showNotificationPrompt && <div className="notification-prompt-backdrop" role="presentation">
         <section className="notification-prompt" role="dialog" aria-modal="true" aria-labelledby="notification-prompt-title">

@@ -86,6 +86,7 @@ main { min-width: 0; }
 .install-button { border-color: #285752; color: #7dd1c8; background: #102522; }
 .install-button:hover:not(:disabled) { border-color: var(--cyan); color: #dcfffa; }
 .notification-button.enabled { border-color: #4c446e; color: #b9aaff; background: #1d1931; }
+.guide-button { border-color: #3d4e61; color: #a9bad2; background: #131d2a; }
 .avatar { display: grid; place-items: center; width: 30px; height: 30px; background: #1b2a34; border: 1px solid #2e3f4a; border-radius: 50%; color: #b8c7cf; font-size: 9px; font-weight: 700; }
 .content { max-width: 1480px; margin: auto; padding: 40px; }
 .page-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 27px; }
@@ -628,6 +629,17 @@ main { min-width: 0; }
 .storage-medium-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 13px; }
 .storage-medium-actions > button { flex: 1 1 150px; }
 .adoption-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 20px; background: #020507d9; backdrop-filter: blur(5px); }
+.quick-start-backdrop { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 20px; background: #020507df; backdrop-filter: blur(6px); }
+.quick-start-dialog { position: relative; width: min(700px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; padding: 29px; border: 1px solid #34545d; border-radius: 13px; background: #101a21; box-shadow: 0 30px 90px #000b; }
+.quick-start-dialog h2 { margin: 10px 38px 8px 0; font-size: 22px; }
+.quick-start-intro { margin: 0; color: #80939c; font-size: 10px; line-height: 1.6; }
+.quick-start-list { display: grid; gap: 9px; margin: 20px 0; padding: 0; list-style: none; }
+.quick-start-list li { display: grid; grid-template-columns: 31px minmax(0, 1fr); gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #0b151b; }
+.quick-start-list li > b { display: grid; place-items: center; width: 31px; height: 31px; border: 1px solid #34716b; border-radius: 50%; color: var(--cyan); font: 10px "DM Mono"; }
+.quick-start-list strong, .quick-start-list span { display: block; }
+.quick-start-list strong { color: #d9e4e7; font-size: 10px; }
+.quick-start-list span { margin-top: 5px; color: #758a93; font-size: 8px; line-height: 1.55; }
+.quick-start-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .adoption-dialog { position: relative; width: min(650px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; padding: 27px; border: 1px solid #69403d; border-radius: 13px; background: #11191f; box-shadow: 0 30px 90px #000b; }
 .adoption-dialog h2 { margin: 10px 38px 17px 0; font-size: 19px; }
 .adoption-warning { display: flex; gap: 12px; padding: 14px; border: 1px solid #713c3c; border-radius: 8px; background: #2b1b1d; }
@@ -851,6 +863,9 @@ main { min-width: 0; }
   .directory-shortcuts { padding-left: 16px; padding-right: 16px; }
   .directory-list > button { padding-left: 16px; padding-right: 16px; }
   .directory-browser-actions { align-items: stretch; flex-direction: column; }
+  .quick-start-backdrop { padding: 8px; }
+  .quick-start-dialog { max-height: 96vh; padding: 24px 18px; }
+  .quick-start-actions { align-items: stretch; flex-direction: column; }
   .item-row { grid-template-columns: auto minmax(0,1fr); }.item-row > .state { grid-column: 2; justify-self: start; }
   .safety-action.google-photos-action { grid-template-columns: 1fr; }
   .safety-action.retrigger-action { grid-template-columns: 1fr; }

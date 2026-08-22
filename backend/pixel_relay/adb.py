@@ -83,6 +83,43 @@ def primary_storage_move_guidance(output: str) -> str:
     )
 
 
+def shared_storage_guidance(
+    *,
+    expected_uuid: str,
+    observed_uuid: str | None,
+    user_unlocked: bool | None,
+    alternate_path_available: bool,
+    volumes: list[str],
+) -> str:
+    """Explain why Android's primary shared-storage path is not ready."""
+    if user_unlocked is False:
+        return (
+            "Pixel shared storage is locked after startup. Unlock the Pixel with its PIN, "
+            "pattern, or password, wait for the home screen, then refresh the device."
+        )
+    if expected_uuid and observed_uuid != expected_uuid:
+        return (
+            f"Android primary storage is {observed_uuid or 'unavailable'}; "
+            f"Pixel Relay expects {expected_uuid}. Reconnect and mount the selected drive, "
+            "or choose the Pixel's current storage in Settings."
+        )
+    if alternate_path_available:
+        return (
+            "Android shared storage is mounted, but its /sdcard alias is unavailable. "
+            "Reboot the Pixel, unlock it fully, and refresh the device before transferring."
+        )
+    if expected_uuid and any(expected_uuid in volume for volume in volumes):
+        return (
+            "The selected Android storage is detected, but /sdcard is not mounted. "
+            "Keep the drive connected, unlock the Pixel, wait for Android to finish "
+            "mounting it, then refresh the device."
+        )
+    return (
+        "Android /sdcard shared storage is unavailable. Unlock the Pixel after startup, "
+        "reconnect any selected storage drive, and refresh the device."
+    )
+
+
 def parse_adb_progress(output: str) -> int | None:
     """Extract the latest percentage emitted by `adb push -p`."""
     matches = re.findall(r"(?<!\d)(100|[1-9]?\d)%(?!\d)", output)
@@ -502,6 +539,12 @@ class SafeAdb:
             except AdbError:
                 return ""
 
+        async def optional_result(*args: str) -> CommandResult:
+            try:
+                return await self.shell(*args, check=False)
+            except AdbError as exc:
+                return CommandResult(1, "", exc.output or str(exc))
+
         battery = parse_battery(await optional("dumpsys", "battery"))
         snapshot.battery_level = battery.get("level")
         snapshot.temperature_c = battery.get("temperature_c")
@@ -512,7 +555,8 @@ class SafeAdb:
         snapshot.primary_storage_uuid = await optional("sm", "get-primary-storage-uuid") or None
         snapshot.disks = split_lines(await optional("sm", "list-disks"))
         snapshot.volumes = split_lines(await optional("sm", "list-volumes", "all"))
-        storage = parse_df(await optional("df", "-k", "/sdcard"))
+        storage_result = await optional_result("df", "-k", "/sdcard")
+        storage = parse_df(f"{storage_result.stdout}\n{storage_result.stderr}")
         if storage:
             snapshot.storage_total_bytes = storage["total"] * 1024
             snapshot.storage_used_bytes = storage["used"] * 1024
@@ -524,6 +568,28 @@ class SafeAdb:
         snapshot.storage_ready = bool(
             storage and (not expected_uuid or snapshot.primary_storage_uuid == expected_uuid)
         )
+        if not snapshot.storage_ready:
+            alternate_storage = None
+            user_unlocked = None
+            if not storage:
+                alternate_result = await optional_result("df", "-k", "/storage/emulated/0")
+                alternate_storage = parse_df(
+                    f"{alternate_result.stdout}\n{alternate_result.stderr}"
+                )
+                unlocked_value = (
+                    await optional("getprop", "sys.user.0.ce_available")
+                ).strip().lower()
+                if unlocked_value in {"1", "true"}:
+                    user_unlocked = True
+                elif unlocked_value in {"0", "false"}:
+                    user_unlocked = False
+            snapshot.error = shared_storage_guidance(
+                expected_uuid=expected_uuid,
+                observed_uuid=snapshot.primary_storage_uuid,
+                user_unlocked=user_unlocked,
+                alternate_path_available=bool(alternate_storage),
+                volumes=snapshot.volumes,
+            )
         routes = await optional("ip", "route")
         connectivity = parse_connectivity(await optional("dumpsys", "connectivity"))
         snapshot.network_type = connectivity.get("network_type")
@@ -550,12 +616,9 @@ class SafeAdb:
         if snapshot.state != "device":
             raise DeviceOffline(snapshot.error or "Pixel is offline")
         if not snapshot.storage_ready:
-            if expected_uuid:
-                raise StorageMissing(
-                    f"Primary storage UUID is {snapshot.primary_storage_uuid or 'unavailable'}; "
-                    f"expected {expected_uuid}"
-                )
-            raise StorageMissing("Phone internal shared storage /sdcard is unavailable")
+            raise StorageMissing(
+                snapshot.error or "Phone internal shared storage /sdcard is unavailable"
+            )
         return snapshot
 
     @staticmethod

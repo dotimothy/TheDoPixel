@@ -19,6 +19,7 @@ from pixel_relay.adb import (
     parse_storage_service_dump,
     parse_storage_volumes,
     primary_storage_move_guidance,
+    shared_storage_guidance,
 )
 from pixel_relay.config import Settings
 from pydantic import ValidationError
@@ -267,6 +268,32 @@ def test_primary_storage_failure_explains_locked_android_user() -> None:
     assert "user profile is locked" in guidance
     assert "PIN, pattern, or password" in guidance
     assert "home screen" in guidance
+
+
+def test_shared_storage_guidance_prioritizes_locked_user() -> None:
+    guidance = shared_storage_guidance(
+        expected_uuid="selected-drive-uuid",
+        observed_uuid=None,
+        user_unlocked=False,
+        alternate_path_available=False,
+        volumes=[],
+    )
+
+    assert "locked after startup" in guidance
+    assert "PIN, pattern, or password" in guidance
+
+
+def test_shared_storage_guidance_explains_missing_sdcard_alias() -> None:
+    guidance = shared_storage_guidance(
+        expected_uuid="",
+        observed_uuid=None,
+        user_unlocked=True,
+        alternate_path_available=True,
+        volumes=[],
+    )
+
+    assert "shared storage is mounted" in guidance
+    assert "/sdcard alias is unavailable" in guidance
 
 
 def test_adb_push_progress_parser_uses_latest_percentage() -> None:
@@ -550,6 +577,55 @@ async def test_snapshot_measures_internal_data_partition(
     assert snapshot.storage_total_bytes == 100000 * 1024
     assert snapshot.internal_storage_total_bytes == 30000000 * 1024
     assert snapshot.internal_storage_free_bytes == 20000000 * 1024
+
+
+async def test_snapshot_populates_locked_shared_storage_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adb = SafeAdb(Settings(data_dir=tmp_path, connection_mode="usb"))
+
+    async def connect() -> None:
+        return None
+
+    async def shell(*args: str, **_kwargs) -> CommandResult:
+        if args == ("df", "-k", "/sdcard"):
+            return CommandResult(1, "", "df: /sdcard: Permission denied")
+        if args == ("df", "-k", "/storage/emulated/0"):
+            return CommandResult(1, "", "df: /storage/emulated/0: Permission denied")
+        if args == ("getprop", "sys.user.0.ce_available"):
+            return CommandResult(0, "false", "")
+        return CommandResult(0, "", "")
+
+    monkeypatch.setattr(adb, "connect", connect)
+    monkeypatch.setattr(adb, "shell", shell)
+
+    snapshot = await adb.snapshot("")
+
+    assert snapshot.state == "device"
+    assert snapshot.storage_ready is False
+    assert snapshot.error is not None
+    assert "locked after startup" in snapshot.error
+
+
+async def test_ensure_ready_uses_snapshot_storage_diagnostic(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adb = SafeAdb(Settings(data_dir=tmp_path, connection_mode="usb"))
+    snapshot = DeviceSnapshot(
+        state="device",
+        storage_ready=False,
+        error="Unlock the Pixel and refresh the device.",
+    )
+
+    async def read_snapshot(_expected_uuid: str = "") -> DeviceSnapshot:
+        return snapshot
+
+    monkeypatch.setattr(adb, "snapshot", read_snapshot)
+
+    with pytest.raises(AdbError, match="Unlock the Pixel and refresh"):
+        await adb.ensure_ready("")
 
 
 async def test_adoption_uses_fixed_partition_and_primary_migration_commands(

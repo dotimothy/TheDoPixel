@@ -61,6 +61,26 @@ starting the service:
 After installation, start TheDoPixel with `./pixel-relay`. The first start prompts
 you to create the local administrator and opens `http://127.0.0.1:8741`.
 
+## First-time guide
+
+The dashboard opens this guide automatically the first time you sign in. You can
+open it again at any time with **Quick start** in the top bar.
+
+1. Connect the Pixel, enable USB debugging, approve the computer, and unlock the
+   phone with its PIN after each reboot. Keep any adopted storage drive connected.
+2. Open **Settings**, choose USB, network ADB, or FTP, save, and confirm the Pixel's
+   target storage is available on **Overview**. USB is simplest for a first run.
+3. Open **Sources**, choose a server folder, and scan it. The service account needs
+   read access. Photos, RAW images, and videos such as MP4 are supported.
+4. Filter and select the files, give the batch a name, and create it. Keep the Pixel
+   connected while Pixel Relay transfers, checksums, and registers the media.
+5. When the batch is ready, confirm in Google Photos that backup finished. Mark the
+   batch verified, then purge its Pixel copies when you want the space back. Source
+   originals are never deleted by this purge.
+
+If Overview reports that `/sdcard` is unavailable, unlock the Pixel fully after
+startup, reconnect the selected drive if there is one, and refresh the device.
+
 ## Configuration
 
 Copy `.env.example` to `.env` to override defaults. Important settings include:

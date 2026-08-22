@@ -26,6 +26,9 @@ export const Icons = {
   settings: (props: IconProps) => (
     <Icon {...props}><circle cx="12" cy="12" r="3" /><path d="M19 13.5v-3l-2-.7-.7-1.7.9-1.9-2.1-2.1-1.9.9-1.7-.7L10.5 2h-3l-.7 2.3-1.7.7-1.9-.9-2.1 2.1.9 1.9-.7 1.7-2.3.7v3l2.3.7.7 1.7-.9 1.9 2.1 2.1 1.9-.9 1.7.7.7 2.3h3l.7-2.3 1.7-.7 1.9.9 2.1-2.1-.9-1.9.7-1.7z" transform="translate(3 0) scale(.75 1)" /></Icon>
   ),
+  help: (props: IconProps) => (
+    <Icon {...props}><circle cx="12" cy="12" r="9" /><path d="M9.7 9a2.4 2.4 0 1 1 3.2 2.3c-.7.3-.9.8-.9 1.7M12 17h.01" /></Icon>
+  ),
   phone: (props: IconProps) => (
     <Icon {...props}><rect x="7" y="2.5" width="10" height="19" rx="2.5" /><path d="M10 5h4M11 18.5h2" /></Icon>
   ),
