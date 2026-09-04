@@ -614,7 +614,7 @@ class Repository:
                 MAX(CASE WHEN historical_items.state='purged_from_pixel'
                   THEN 1 ELSE 0 END) AS previously_purged,
                 SUM(CASE WHEN historical_items.state IS NOT NULL
-                  AND historical_items.state != 'purged_from_pixel'
+                  AND historical_items.state NOT IN ('cancelled', 'purged_from_pixel')
                   THEN 1 ELSE 0 END) AS active_item_count
               FROM source_files historical_files
               LEFT JOIN batch_items historical_items
@@ -625,7 +625,8 @@ class Repository:
               content_history.source_path_count > 1 AS duplicate_content,
               content_history.previous_batch_count,
               content_history.previously_confirmed,
-              content_history.previously_purged
+              content_history.previously_purged,
+              content_history.active_item_count
             FROM source_files
             JOIN source_roots ON source_roots.id=source_files.root_id
             JOIN content_history ON content_history.sha256=source_files.sha256

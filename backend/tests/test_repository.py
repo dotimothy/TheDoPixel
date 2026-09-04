@@ -374,6 +374,20 @@ def test_source_files_report_prior_confirmed_and_purged_history(
     assert available[0]["previously_purged"] == 1
 
 
+def test_safely_cancelled_file_is_ready_for_another_batch(
+    repository: Repository, tmp_path: Path
+) -> None:
+    record, _media = source_file(repository, tmp_path)
+    batch = repository.create_batch("Cancelled", [record["id"]], 1)
+    repository.cancel_batch(batch["id"], 1)
+
+    available = repository.list_files(unbatched_only=True)
+
+    assert [file["id"] for file in available] == [record["id"]]
+    assert available[0]["active_item_count"] == 0
+    assert available[0]["previous_batch_count"] == 1
+
+
 def test_batch_reports_stalled_transfer_activity(repository: Repository, tmp_path: Path) -> None:
     record, _media = source_file(repository, tmp_path)
     batch = repository.create_batch("Stalled", [record["id"]], 1)
