@@ -381,6 +381,7 @@ class Repository:
         ready: list[dict[str, Any]] = []
         skipped: list[dict[str, str]] = []
         seen: set[Path] = set()
+        visited_directories: set[Path] = set()
         pending: dict[Future[str], dict[str, Any]] = {}
         examined = 0
         eligible = 0
@@ -432,23 +433,30 @@ class Repository:
                     continue
                 try:
                     if current.is_file():
-                        yield current, current.stat()
+                        resolved = resolve_inside(current, root_path)
+                        yield resolved, resolved.stat()
                         continue
-                    with os.scandir(current) as entries:
+
+                    # Windows junctions and directory symlinks are reparse points.
+                    # DirEntry.is_dir(follow_symlinks=False) reports those as not
+                    # being directories, which used to omit their complete trees.
+                    # Resolve each directory before visiting it both to enforce the
+                    # source-root boundary and to prevent junction/symlink loops.
+                    resolved_directory = resolve_inside(current, root_path)
+                    if resolved_directory in visited_directories:
+                        continue
+                    visited_directories.add(resolved_directory)
+                    with os.scandir(resolved_directory) as entries:
                         directories: list[Path] = []
                         for entry in entries:
                             path = Path(entry.path)
                             if is_macos_metadata(path):
                                 continue
                             try:
-                                if entry.is_dir(follow_symlinks=False):
-                                    directories.append(path)
+                                if entry.is_dir(follow_symlinks=True):
+                                    directories.append(resolve_inside(path, root_path))
                                 elif entry.is_file(follow_symlinks=True):
-                                    resolved = (
-                                        resolve_inside(path, root_path)
-                                        if entry.is_symlink()
-                                        else path
-                                    )
+                                    resolved = resolve_inside(path, root_path)
                                     yield resolved, resolved.stat()
                             except (OSError, ValueError) as exc:
                                 record_issue(path, exc)
