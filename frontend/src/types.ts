@@ -249,6 +249,7 @@ export interface SourceFile {
   media_kind: "photo" | "video";
   discovered_at: string;
   duplicate_content: boolean;
+  active_item_count?: number;
   previous_batch_count?: number;
   previously_confirmed?: boolean;
   previously_purged?: boolean;

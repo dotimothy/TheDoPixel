@@ -258,7 +258,9 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ paths: null, full_verify: fullVerify })
     }),
-  files: () => request<SourceFile[]>("/files?unbatched_only=true"),
+  // Sources & Imports needs both ready and active files so its totals can
+  // explain the difference between scan discoveries and batchable media.
+  files: () => request<SourceFile[]>("/files?unbatched_only=false"),
   upload: (file: File) => {
     const form = new FormData();
     form.append("media", file);

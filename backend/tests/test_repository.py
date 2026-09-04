@@ -180,6 +180,26 @@ def test_scan_progress_includes_nested_folder_issues(
     assert updates[-1]["issues"] == result["skipped"]
 
 
+def test_scan_follows_directory_links_inside_source_without_duplicates(
+    repository: Repository, tmp_path: Path
+) -> None:
+    root_path = tmp_path / "linked-source"
+    media_folder = root_path / "media"
+    media_folder.mkdir(parents=True)
+    (media_folder / "linked-photo.jpg").write_bytes(b"photo")
+    link = root_path / "media-link"
+    try:
+        link.symlink_to(media_folder, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"Directory links are unavailable: {exc}")
+    root = repository.add_root("Linked source", str(root_path))
+
+    result = repository.scan_root(root["id"])
+
+    assert [Path(file["path"]).name for file in result["files"]] == ["linked-photo.jpg"]
+    assert result["stats"]["examined"] == 1
+
+
 def test_incremental_scan_reuses_hashes_and_full_verify_rehashes(
     repository: Repository,
     tmp_path: Path,
@@ -352,6 +372,20 @@ def test_source_files_report_prior_confirmed_and_purged_history(
     assert available[0]["previous_batch_count"] == 1
     assert available[0]["previously_confirmed"] == 1
     assert available[0]["previously_purged"] == 1
+
+
+def test_safely_cancelled_file_is_ready_for_another_batch(
+    repository: Repository, tmp_path: Path
+) -> None:
+    record, _media = source_file(repository, tmp_path)
+    batch = repository.create_batch("Cancelled", [record["id"]], 1)
+    repository.cancel_batch(batch["id"], 1)
+
+    available = repository.list_files(unbatched_only=True)
+
+    assert [file["id"] for file in available] == [record["id"]]
+    assert available[0]["active_item_count"] == 0
+    assert available[0]["previous_batch_count"] == 1
 
 
 def test_batch_reports_stalled_transfer_activity(repository: Repository, tmp_path: Path) -> None:

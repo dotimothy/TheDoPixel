@@ -1756,9 +1756,11 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
     finally { setBusy(false); }
   }
   const availableRootIds = new Set(roots.filter((root) => root.available).map((root) => root.id));
-  const eligibleFiles = files.filter(
+  const includedFiles = files.filter(
     (file) => availableRootIds.has(file.root_id) && !excludedBatchSources.has(file.root_id)
   );
+  const eligibleFiles = includedFiles.filter((file) => !(file.active_item_count || 0));
+  const activeFileCount = includedFiles.length - eligibleFiles.length;
   const matchesMediaFilter = (file: SourceFile) => mediaFilter === "all"
     || (mediaFilter === "raw" && isRaw(file))
     || (mediaFilter === "photo" && file.media_kind === "photo" && !isRaw(file))
@@ -1910,7 +1912,7 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
                       {progress.failed
                         ? progress.message || "Scan failed"
                         : progress.complete
-                          ? `${progress.discovered.toLocaleString()} media · ${(progress.cached ?? 0).toLocaleString()} cached · ${(progress.hashed ?? 0).toLocaleString()} hashed · ${progress.skipped.toLocaleString()} issues`
+                          ? `${progress.discovered.toLocaleString()} media found · ${(progress.cached ?? 0).toLocaleString()} cached · ${(progress.hashed ?? 0).toLocaleString()} hashed · ${progress.skipped.toLocaleString()} issues`
                           : progress.total
                             ? `${progress.processed.toLocaleString()} / ${progress.total.toLocaleString()} · ${(progress.cached ?? 0).toLocaleString()} cached · ${(progress.hashed ?? 0).toLocaleString()} hashed`
                             : `${(progress.examined ?? 0).toLocaleString()} files examined · reading folder tree…`}
@@ -1935,16 +1937,18 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
           <div className="panel-head file-panel-head"><div><span className="panel-kicker">DISCOVERED / NOT IN FLIGHT</span><h2>Ready for a batch</h2></div><span className="selection-count">{selected.size.toLocaleString()} selected · {bytes(selectedBytes)}</span></div>
           <div className="batch-source-picker">
             <div className="batch-source-heading">
-              <div><strong>Batch sources</strong><small>Choose which roots are eligible for this batch.</small></div>
-              <span>{includedSourceCount} of {availableSourceCount} available included</span>
+              <div><strong>Batch sources</strong><small>Choose which roots are eligible for this batch. Files in active batches are excluded.</small></div>
+              <span>{eligibleFiles.length.toLocaleString()} ready · {activeFileCount.toLocaleString()} in active batches</span>
             </div>
             <div className="batch-source-options">
               {roots.map((root) => {
                 const included = root.available && !excludedBatchSources.has(root.id);
-                const readyCount = files.filter((file) => file.root_id === root.id).length;
+                const rootFiles = files.filter((file) => file.root_id === root.id);
+                const readyCount = rootFiles.filter((file) => !(file.active_item_count || 0)).length;
+                const activeCount = rootFiles.length - readyCount;
                 return <label className={`${included ? "included" : ""} ${root.available ? "" : "unavailable"}`} key={root.id} title={root.issue || undefined}>
                   <input type="checkbox" checked={included} disabled={!root.available} onChange={() => toggleBatchSource(root.id)} />
-                  <span><strong>{root.name}</strong><small>{root.issue || `${readyCount.toLocaleString()} ready`}</small></span>
+                  <span><strong>{root.name}</strong><small>{root.issue || `${readyCount.toLocaleString()} ready · ${activeCount.toLocaleString()} active`}</small></span>
                 </label>;
               })}
               {!roots.length && <small className="batch-source-empty">Add or upload to a source before creating a batch.</small>}
