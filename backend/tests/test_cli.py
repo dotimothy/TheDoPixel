@@ -102,6 +102,25 @@ async def test_server_accepts_shutdown_request_without_os_signal() -> None:
     assert server.should_exit is True
 
 
+@pytest.mark.asyncio
+async def test_server_restart_request_is_distinct_from_shutdown() -> None:
+    async def application(_scope, _receive, _send):
+        return None
+
+    events = EventBroker()
+    server = cli.TheDoPixelServer(
+        uvicorn.Config(application, timeout_graceful_shutdown=2),
+        events,
+    )
+
+    server.request_restart()
+
+    assert server.restart_requested is True
+    assert events.request_shutdown().data == {"action": "restart"}
+    await asyncio.sleep(0.3)
+    assert server.should_exit is True
+
+
 def test_clean_removes_only_known_runtime_files(tmp_path) -> None:
     settings = Settings(data_dir=tmp_path)
     database = settings.database_path

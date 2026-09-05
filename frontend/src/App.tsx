@@ -222,6 +222,7 @@ export default function App() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [serverStopped, setServerStopped] = useState(false);
+  const [serverRestarting, setServerRestarting] = useState(false);
   const [shuttingDown, setShuttingDown] = useState(false);
   const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement));
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -340,10 +341,16 @@ export default function App() {
         refreshTimer = window.setTimeout(() => void refreshDashboard(), 250);
       })
     );
-    stream.addEventListener("server", () => {
+    stream.addEventListener("server", (event) => {
       disposed = true;
       stream.close();
-      window.close();
+      let restarting = false;
+      try {
+        const envelope = JSON.parse((event as MessageEvent<string>).data) as { data?: { action?: string } };
+        restarting = envelope.data?.action === "restart";
+      } catch { /* A legacy shutdown event still stops the page safely. */ }
+      setServerRestarting(restarting);
+      if (!restarting) window.close();
       setServerStopped(true);
     });
     stream.onerror = () => {
@@ -365,6 +372,19 @@ export default function App() {
       stream.close();
     };
   }, [user, refreshDashboard]);
+
+  useEffect(() => {
+    if (!serverRestarting) return;
+    let disposed = false;
+    const timer = window.setInterval(() => {
+      void fetch("/api/v1/health", { cache: "no-store" })
+        .then((response) => {
+          if (response.ok && !disposed) window.location.reload();
+        })
+        .catch(() => undefined);
+    }, 1000);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [serverRestarting]);
 
   useEffect(() => {
     if (!user || quickStartChecked.current) return;
@@ -426,7 +446,7 @@ export default function App() {
     };
   }, []);
 
-  if (serverStopped) return <ServerStoppedScreen />;
+  if (serverStopped) return <ServerStoppedScreen restarting={serverRestarting} />;
   if (checking) return <BootScreen />;
   if (!user) return <Login onLogin={setUser} />;
 
@@ -675,8 +695,8 @@ function BootScreen() {
   return <div className="boot"><div className="brand-mark hero"><span /><span /><span /><span /></div><p>Starting TheDoPixel…</p></div>;
 }
 
-function ServerStoppedScreen() {
-  return <div className="boot stopped-screen"><div className="brand-mark hero"><span /><span /><span /><span /></div><h1>TheDoPixel stopped</h1><p>This tab can be closed. Restart the server and reload to reconnect.</p></div>;
+function ServerStoppedScreen({ restarting }: { restarting: boolean }) {
+  return <div className="boot stopped-screen"><div className="brand-mark hero"><span /><span /><span /><span /></div><h1>{restarting ? "Installing update…" : "TheDoPixel stopped"}</h1><p>{restarting ? "The server is restarting automatically. This page will reconnect when it is ready." : "This tab can be closed. Restart the server and reload to reconnect."}</p></div>;
 }
 
 function Login({ onLogin }: { onLogin: (user: User) => void }) {
@@ -2247,9 +2267,9 @@ function Settings({ report, advanced }: { report: (message: string, type?: Notic
     }
   }
   async function updateApp() {
-    if (!window.confirm("Pull the latest app updates from Git? Restart Pixel Relay afterward.")) return;
+    if (!window.confirm("Download and install the latest app updates? TheDoPixel will restart automatically if an update is found.")) return;
     setUpdatingApp(true);
-    try { const result = await api.updateApp(); report(result.updated ? "App updated; restart Pixel Relay to apply changes" : "App is already up to date"); }
+    try { const result = await api.updateApp(); report(result.restarting ? "Update installed; TheDoPixel is restarting" : "App is already up to date"); }
     catch (error) { report(error instanceof Error ? error.message : "App update failed", "bad"); }
     finally { setUpdatingApp(false); }
   }

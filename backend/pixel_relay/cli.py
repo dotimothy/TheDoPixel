@@ -62,6 +62,7 @@ class TheDoPixelServer(uvicorn.Server):
         super().__init__(config)
         self.events = events
         self._shutdown_notice_sent = False
+        self.restart_requested = False
 
     def handle_exit(self, sig: int, frame: FrameType | None) -> None:
         self._captured_signals.append(sig)
@@ -73,13 +74,13 @@ class TheDoPixelServer(uvicorn.Server):
 
         self.request_shutdown()
 
-    def request_shutdown(self) -> None:
+    def request_shutdown(self, action: str = "shutdown") -> None:
         """Notify connected dashboards, then gracefully stop the HTTP server."""
         if self._shutdown_notice_sent:
             return
 
         self._shutdown_notice_sent = True
-        self.events.request_shutdown()
+        self.events.request_shutdown(action)
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -88,6 +89,10 @@ class TheDoPixelServer(uvicorn.Server):
             # Give browsers enough time to receive the shutdown event and close
             # their SSE connection before Uvicorn inspects active connections.
             loop.call_later(0.25, self._begin_shutdown)
+
+    def request_restart(self) -> None:
+        self.restart_requested = True
+        self.request_shutdown("restart")
 
     def _begin_shutdown(self) -> None:
         self.should_exit = True
@@ -451,10 +456,17 @@ def serve(
         application.state.events,
     )
     application.state.shutdown_callback = server.request_shutdown
+    application.state.restart_callback = server.request_restart
     try:
         server.run()
     finally:
-        close_dashboard_tabs(bind_host, bind_port)
+        if not server.restart_requested:
+            close_dashboard_tabs(bind_host, bind_port)
+    if server.restart_requested:
+        os.execv(
+            sys.executable,
+            [sys.executable, "-m", "pixel_relay.cli", *sys.argv[1:]],
+        )
 
 
 @app.command()

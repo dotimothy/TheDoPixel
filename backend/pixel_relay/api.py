@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import string
 import subprocess
 import sys
@@ -81,6 +82,10 @@ UploadedMedia = Annotated[UploadFile, File()]
 def default_server_directory() -> Path:
     volumes = Path("/Volumes")
     return volumes if sys.platform == "darwin" and volumes.is_dir() else Path.home()
+
+
+def application_root() -> Path:
+    return Path(__file__).resolve().parents[2]
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -212,6 +217,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.auth = auth
     app.state.worker = worker
     app.state.shutdown_callback = None
+    app.state.restart_callback = None
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -2089,8 +2095,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return await asyncio.to_thread(read_tail)
 
     @router.post("/app/update")
-    async def update_app(_user: MutatingUser) -> dict:
-        root = Path(__file__).resolve().parents[2]
+    async def update_app(background_tasks: BackgroundTasks, user: MutatingUser) -> dict:
+        root = application_root()
+        restart_callback = app.state.restart_callback
+        if not callable(restart_callback):
+            raise DomainError("app_restart_unavailable", "This server process cannot restart itself", status_code=409)
         if not (root / ".git").is_dir():
             raise DomainError("app_update_unavailable", "This installation is not a Git checkout", status_code=409)
         status = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True, check=False)
@@ -2101,7 +2110,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         result = subprocess.run(["git", "pull", "--ff-only"], cwd=root, capture_output=True, text=True, check=False)
         if result.returncode != 0:
             raise DomainError("app_update_failed", result.stderr.strip() or result.stdout.strip() or "Git update failed", status_code=409)
-        return {"updated": "Already up to date" not in result.stdout, "message": result.stdout.strip() or "Repository updated"}
+        updated = "Already up to date" not in result.stdout
+        if updated:
+            uv = shutil.which("uv")
+            npm = shutil.which("npm")
+            if not uv or not npm:
+                raise DomainError("app_update_tools_missing", "The update was downloaded, but uv and npm are required to finish installing it", status_code=409)
+            commands = [
+                [uv, "sync", "--project", str(root)],
+                [npm, "--prefix", str(root / "frontend"), "ci"],
+                [npm, "--prefix", str(root / "frontend"), "run", "build"],
+            ]
+            for command in commands:
+                installed = subprocess.run(command, cwd=root, capture_output=True, text=True, check=False)
+                if installed.returncode != 0:
+                    raise DomainError("app_update_install_failed", installed.stderr.strip() or installed.stdout.strip() or "Update installation failed", status_code=409)
+            db.audit("app.update", "server", user_id=user["user_id"])
+            events.request_shutdown("restart")
+            background_tasks.add_task(restart_callback)
+        return {
+            "updated": updated,
+            "restarting": updated,
+            "message": result.stdout.strip() or "Repository updated",
+        }
 
     @router.get("/settings")
     async def read_settings(_user: Authenticated) -> dict:

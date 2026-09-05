@@ -35,14 +35,14 @@ class EventBroker:
     def shutdown_requested(self) -> bool:
         return self._shutdown_event is not None
 
-    def request_shutdown(self) -> Event:
+    def request_shutdown(self, action: str = "shutdown") -> Event:
         """Wake every SSE subscriber before the HTTP server starts draining."""
         if self._shutdown_event is not None:
             return self._shutdown_event
         event = Event(
             id=self._next_id,
             kind="server",
-            data={"action": "shutdown"},
+            data={"action": action},
             created_at=datetime.now(UTC).isoformat(),
         )
         self._next_id += 1

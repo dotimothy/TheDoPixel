@@ -28,3 +28,11 @@ def test_shutdown_request_is_idempotent() -> None:
 
     assert first is second
     assert events.shutdown_requested is True
+
+
+def test_restart_request_tells_browser_to_reconnect() -> None:
+    events = EventBroker()
+
+    restart = events.request_shutdown("restart")
+
+    assert restart.data == {"action": "restart"}

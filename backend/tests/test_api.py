@@ -2,6 +2,7 @@ import asyncio
 import json
 import threading
 import time
+import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -89,6 +90,49 @@ def test_server_shutdown_requires_runtime_control(tmp_path: Path) -> None:
 
     assert response.status_code == 409
     assert response.json()["code"] == "server_shutdown_unavailable"
+
+
+def test_app_update_installs_and_restarts_when_git_downloads_changes(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    app = configured_app(tmp_path)
+    checkout = tmp_path / "checkout"
+    (checkout / ".git").mkdir(parents=True)
+    (checkout / "frontend").mkdir()
+    callbacks: list[str] = []
+    commands: list[list[str]] = []
+    app.state.restart_callback = lambda: callbacks.append("restart")
+    monkeypatch.setattr(api_module, "application_root", lambda: checkout)
+    monkeypatch.setattr(api_module.shutil, "which", lambda command: f"/tools/{command}")
+
+    def run(command, **_kwargs):
+        commands.append(command)
+        stdout = "Updating abc..def\n" if command[:2] == ["git", "pull"] else ""
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(api_module.subprocess, "run", run)
+
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "a secure local password"},
+        )
+        response = client.post(
+            "/api/v1/app/update",
+            headers={"X-CSRF-Token": login.json()["csrf_token"]},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["restarting"] is True
+    assert callbacks == ["restart"]
+    assert commands == [
+        ["git", "status", "--porcelain"],
+        ["git", "pull", "--ff-only"],
+        ["/tools/uv", "sync", "--project", str(checkout)],
+        ["/tools/npm", "--prefix", str(checkout / "frontend"), "ci"],
+        ["/tools/npm", "--prefix", str(checkout / "frontend"), "run", "build"],
+    ]
 
 
 def test_dashboard_separates_active_batch_from_five_other_in_progress_batches(

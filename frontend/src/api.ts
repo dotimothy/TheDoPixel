@@ -324,7 +324,7 @@ export const api = {
   audit: () => request<AuditEntry[]>("/audit"),
   logs: (limit = 500) => request<SystemLog[]>(`/logs?limit=${limit}`),
   settings: () => request<RelaySettings>("/settings"),
-  updateApp: () => request<{ updated: boolean; message: string }>("/app/update", { method: "POST" }),
+  updateApp: () => request<{ updated: boolean; restarting: boolean; message: string }>("/app/update", { method: "POST" }),
   updateSettings: (payload: {
     device_serial?: string;
     expected_primary_uuid?: string;
