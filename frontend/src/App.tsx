@@ -2068,6 +2068,7 @@ function Settings({ report }: { report: (message: string, type?: Notice["type"])
   const [speedTest, setSpeedTest] = useState<AdbSpeedTestResult | null>(null);
   const [ftpSpeedTesting, setFtpSpeedTesting] = useState(false);
   const [ftpSpeedTest, setFtpSpeedTest] = useState<FtpSpeedTestResult | null>(null);
+  const [updatingApp, setUpdatingApp] = useState(false);
   useEffect(() => {
     void api.settings().then((value) => {
       const normalized = {
@@ -2159,6 +2160,13 @@ function Settings({ report }: { report: (message: string, type?: Notice["type"])
       setSaving(false);
     }
   }
+  async function updateApp() {
+    if (!window.confirm("Pull the latest app updates from Git? Restart Pixel Relay afterward.")) return;
+    setUpdatingApp(true);
+    try { const result = await api.updateApp(); report(result.updated ? "App updated; restart Pixel Relay to apply changes" : "App is already up to date"); }
+    catch (error) { report(error instanceof Error ? error.message : "App update failed", "bad"); }
+    finally { setUpdatingApp(false); }
+  }
   async function runAdbSpeedTest() {
     setSpeedTesting(true);
     try {
@@ -2185,7 +2193,7 @@ function Settings({ report }: { report: (message: string, type?: Notice["type"])
   }
   return <>
     <form className="settings-form" onSubmit={save}>
-      <div className="page-heading"><div><div className="page-kicker">APPLIANCE CONFIGURATION</div><h1>Safety <span>& settings</span></h1><p>Change runtime controls here; each save is recorded in the audit log.</p></div><button className="primary" disabled={saving}>{saving ? "Saving…" : "Save settings"}<span>→</span></button></div>
+      <div className="page-heading"><div><div className="page-kicker">APPLIANCE CONFIGURATION</div><h1>Safety <span>& settings</span></h1><p>Change runtime controls here; each save is recorded in the audit log.</p></div><div className="page-heading-actions"><button type="button" className="secondary" disabled={updatingApp} onClick={() => void updateApp()}>{updatingApp ? "Checking…" : "Pull app updates"}</button><button className="primary" disabled={saving}>{saving ? "Saving…" : "Save settings"}<span>→</span></button></div></div>
       <div className="settings-grid">
         <section className="panel setting-card editable-card">
           <span className="panel-kicker">PIXEL TARGET</span>

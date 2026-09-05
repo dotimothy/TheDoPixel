@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import string
+import subprocess
 import sys
 import time
 import uuid
@@ -2070,6 +2071,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return records
 
         return await asyncio.to_thread(read_tail)
+
+    @router.post("/app/update")
+    async def update_app(_user: MutatingUser) -> dict:
+        root = Path(__file__).resolve().parents[2]
+        if not (root / ".git").is_dir():
+            raise DomainError("app_update_unavailable", "This installation is not a Git checkout", status_code=409)
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True, check=False)
+        if status.returncode != 0:
+            raise DomainError("app_update_failed", status.stderr.strip() or "Could not inspect the Git checkout", status_code=500)
+        if status.stdout.strip():
+            raise DomainError("app_update_dirty", "Update skipped because the local Git checkout has uncommitted changes", status_code=409)
+        result = subprocess.run(["git", "pull", "--ff-only"], cwd=root, capture_output=True, text=True, check=False)
+        if result.returncode != 0:
+            raise DomainError("app_update_failed", result.stderr.strip() or result.stdout.strip() or "Git update failed", status_code=409)
+        return {"updated": "Already up to date" not in result.stdout, "message": result.stdout.strip() or "Repository updated"}
 
     @router.get("/settings")
     async def read_settings(_user: Authenticated) -> dict:
