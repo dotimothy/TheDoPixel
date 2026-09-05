@@ -37,6 +37,7 @@ from fastapi.staticfiles import StaticFiles
 from filelock import FileLock, Timeout
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from . import __version__
 from .adb import SAFE_UUID, AdbError, parse_storage_volumes
 from .auth import (
     SESSION_COOKIE,
@@ -86,6 +87,18 @@ def default_server_directory() -> Path:
 
 def application_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+def application_revision() -> str | None:
+    result = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        cwd=application_root(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    revision = result.stdout.strip()
+    return revision if result.returncode == 0 and revision else None
 
 
 class JsonLogFormatter(logging.Formatter):
@@ -204,7 +217,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(
         title="TheDoPixel",
-        version="0.1.0",
+        version=__version__,
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         lifespan=lifespan,
@@ -218,6 +231,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.worker = worker
     app.state.shutdown_callback = None
     app.state.restart_callback = None
+    app.state.revision = application_revision()
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -366,6 +380,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "status": "ok",
             "configured": auth.has_admin(),
             "version": app.version,
+            "revision": app.state.revision,
         }
 
     @router.post("/server/shutdown", status_code=202)

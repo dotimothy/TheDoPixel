@@ -93,6 +93,7 @@ main { min-width: 0; }
 .shutdown-button:hover:not(:disabled) { border-color: #b85b52; color: #ffd9d5; }
 .notification-button.enabled { border-color: #4c446e; color: #b9aaff; background: #1d1931; }
 .guide-button { border-color: #3d4e61; color: #a9bad2; background: #131d2a; }
+.app-version { color: #627680; font: 8px "DM Mono", monospace; white-space: nowrap; }
 .avatar { display: grid; place-items: center; width: 30px; height: 30px; background: #1b2a34; border: 1px solid #2e3f4a; border-radius: 50%; color: #b8c7cf; font-size: 9px; font-weight: 700; }
 .content { max-width: 1480px; margin: auto; padding: 40px; }
 .page-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 27px; }
@@ -835,6 +836,7 @@ main { min-width: 0; }
 
 @media (max-width: 520px) {
   .secure-label { display: none; }
+  .app-version { display: none; }
   .top-action-button span { display: none; }
   .metric-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
   .metric-card { min-height: 110px; padding: 15px; }.metric-card strong { font-size: 28px; }

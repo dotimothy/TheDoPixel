@@ -76,6 +76,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  health: () => request<{ status: string; configured: boolean; version: string; revision?: string | null }>("/health"),
   async me(): Promise<User> {
     const user = await request<User>("/auth/me");
     csrfToken = user.csrf_token;

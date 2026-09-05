@@ -205,6 +205,7 @@ function matchesBatchFilter(batch: Batch, filter: BatchFilter): boolean {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
+  const [appBuild, setAppBuild] = useState<{ version: string; revision?: string | null } | null>(null);
   const [uiMode, setUiMode] = useState<UiMode>(() => {
     try { return localStorage.getItem("pixel-relay-ui-mode") === "advanced" ? "advanced" : "simple"; }
     catch { return "simple"; }
@@ -318,6 +319,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    void api.health().then(setAppBuild).catch(() => undefined);
     api.me()
       .then(setUser)
       .catch(() => setUser(null))
@@ -632,6 +634,7 @@ export default function App() {
               <Icons.power />
               <span>{shuttingDown ? "Stopping…" : "Shut down"}</span>
             </button>
+            {appBuild && <span className="app-version" title={`TheDoPixel ${appBuild.version}${appBuild.revision ? ` · Git ${appBuild.revision}` : ""}`}>v{appBuild.version}{appBuild.revision ? ` · ${appBuild.revision}` : ""}</span>}
             <span className="avatar">{user.username.slice(0, 2).toUpperCase()}</span>
           </div>
         </header>
