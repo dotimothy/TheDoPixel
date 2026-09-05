@@ -634,7 +634,6 @@ export default function App() {
               <Icons.power />
               <span>{shuttingDown ? "Stopping…" : "Shut down"}</span>
             </button>
-            {appBuild && <span className="app-version" title={`TheDoPixel ${appBuild.version}${appBuild.revision ? ` · Git ${appBuild.revision}` : ""}`}>v{appBuild.version}{appBuild.revision ? ` · ${appBuild.revision}` : ""}</span>}
             <span className="avatar">{user.username.slice(0, 2).toUpperCase()}</span>
           </div>
         </header>
@@ -650,7 +649,7 @@ export default function App() {
           {tab === "batches" && <Batches queue={dashboard?.queue} refreshQueue={refreshDashboard} report={report} requestedBatchId={requestedBatchId} batchRequestHandled={() => setRequestedBatchId(null)} />}
           {tab === "sources" && <Sources report={report} />}
           {tab === "audit" && <Audit />}
-          {tab === "settings" && <Settings report={report} advanced={uiMode === "advanced"} />}
+          {tab === "settings" && <Settings report={report} advanced={uiMode === "advanced"} appBuild={appBuild} />}
         </section>
       </main>
       {notice && <div className={`toast ${notice.type}`} role={notice.type === "bad" ? "alert" : "status"}>
@@ -2165,7 +2164,7 @@ function Audit() {
   </>;
 }
 
-function Settings({ report, advanced }: { report: (message: string, type?: Notice["type"]) => void; advanced: boolean }) {
+function Settings({ report, advanced, appBuild }: { report: (message: string, type?: Notice["type"]) => void; advanced: boolean; appBuild: { version: string; revision?: string | null } | null }) {
   const [settings, setSettings] = useState<RelaySettings | null>(null);
   const [draft, setDraft] = useState<RelaySettings | null>(null);
   const [ftpPassword, setFtpPassword] = useState("");
@@ -2302,7 +2301,7 @@ function Settings({ report, advanced }: { report: (message: string, type?: Notic
   }
   return <>
     <form className="settings-form" onSubmit={save}>
-      <div className="page-heading"><div><div className="page-kicker">APPLIANCE CONFIGURATION</div><h1>Safety <span>& settings</span></h1><p>Change runtime controls here; each save is recorded in the audit log.</p></div><div className="page-heading-actions"><button type="button" className="secondary" disabled={updatingApp} onClick={() => void updateApp()}>{updatingApp ? "Checking…" : "Pull app updates"}</button><button className="primary" disabled={saving}>{saving ? "Saving…" : "Save settings"}<span>→</span></button></div></div>
+      <div className="page-heading"><div><div className="page-kicker">APPLIANCE CONFIGURATION</div><h1>Safety <span>& settings</span></h1><p>Change runtime controls here; each save is recorded in the audit log.</p></div><div className="page-heading-actions">{appBuild && <span className="app-version" title={`TheDoPixel ${appBuild.version}${appBuild.revision ? ` · Git ${appBuild.revision}` : ""}`}>v{appBuild.version}{appBuild.revision ? ` · ${appBuild.revision}` : ""}</span>}<button type="button" className="secondary" disabled={updatingApp} onClick={() => void updateApp()}>{updatingApp ? "Checking…" : "Pull app updates"}</button><button className="primary" disabled={saving}>{saving ? "Saving…" : "Save settings"}<span>→</span></button></div></div>
       <div className="settings-grid">
         <section className="panel setting-card editable-card">
           <span className="panel-kicker">PIXEL TARGET</span>
