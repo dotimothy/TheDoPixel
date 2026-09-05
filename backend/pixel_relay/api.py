@@ -2017,6 +2017,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await events.publish("batch", {"action": "cancelled", "batch_id": batch_id})
         return enrich_batch(batch)
 
+    @router.post("/batches/{batch_id}/skip")
+    async def skip_stalled_batch(batch_id: str, user: MutatingUser) -> dict:
+        """Skip a stalled batch so later split batches can proceed safely."""
+        batch = repository.cancel_batch(batch_id, user["user_id"])
+        worker.wake()
+        await events.publish("batch", {"action": "skipped", "batch_id": batch_id})
+        return enrich_batch(batch)
+
     @router.post("/batches/{batch_id}/confirm")
     async def confirm_batch(
         batch_id: str, _payload: ConfirmationRequest, user: MutatingUser

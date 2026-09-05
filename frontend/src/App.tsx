@@ -1579,6 +1579,7 @@ function BatchDrawer({ batch, close, reload, removed, retriggered, report }: { b
     : null;
   const retryable = items.some((item) => problemStates.includes(item.state));
   const cancellable = !batch.cancelled_at && !batch.confirmed_at && !batch.purged_at;
+  const skippable = cancellable && Boolean(batch.stalled);
   const pausable = cancellable && !batch.paused_at && !ready;
   const resumable = cancellable && Boolean(batch.paused_at);
   const cancellationSettling = Boolean(
@@ -1661,6 +1662,7 @@ function BatchDrawer({ batch, close, reload, removed, retriggered, report }: { b
           {pausable && <div className="safety-action"><div><strong>Pause batch</strong><small>Stops before the next file. A file currently transferring will finish its copy, checksum, and media scan first.</small></div><button className="secondary" disabled={busy} onClick={() => void action(() => api.pauseBatch(batch.id), batch.processing ? "Pause requested; the current file will finish safely" : "Batch paused")}>Pause batch</button></div>}
           {resumable && <div className="safety-action"><div><strong>Resume batch</strong><small>Returns this batch to the queue without resetting completed files or transfer history.</small></div><button className="primary" disabled={busy} onClick={() => void action(() => api.resumeBatch(batch.id), "Batch resumed")}>Resume batch</button></div>}
           {cancellable && <div className="safety-action"><div><strong>Cancel batch</strong><small>Stops remaining queue work. A transfer already in progress will stop after its current integrity check, and any Pixel copy will remain tracked for cleanup.</small></div><button className="secondary" disabled={busy} onClick={() => { if (window.confirm(`Cancel “${batch.name}”?`)) void action(() => api.cancelBatch(batch.id), "Batch cancelled"); }}>Cancel batch</button></div>}
+          {skippable && <div className="safety-action"><div><strong>Skip stalled batch</strong><small>Marks this batch skipped so later batch parts can proceed. Existing Pixel copies remain tracked and can be cleaned up later.</small></div><button className="secondary" disabled={busy} onClick={() => { if (window.confirm(`Skip stalled batch “${batch.name}” and continue with later batches?`)) void action(() => api.skipStalledBatch(batch.id), "Stalled batch skipped; later batches can proceed"); }}>Skip stalled batch</button></div>}
           {cancellationSettling && <div className="safety-action"><div><strong>Cancellation in progress</strong><small>Waiting for the active device operation to return safely.</small></div></div>}
           {retryable && <button className="secondary" disabled={busy} onClick={() => void action(() => api.retryBatch(batch.id), "Retry queued")}><Icons.refresh /> Retry failed items</button>}
           {ready && <div className="safety-action"><div><strong>1. Confirm backup</strong><small>After Google Photos reports that backup is complete, confirm the entire batch here.</small></div><button className="primary amber" disabled={busy} onClick={() => void action(() => api.confirmBatch(batch.id), "Batch marked as backed up")}>I verified this batch</button></div>}

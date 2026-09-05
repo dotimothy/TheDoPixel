@@ -308,6 +308,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ acknowledgement: "CANCEL BATCH" })
     }),
+  skipStalledBatch: (id: string) =>
+    request<Batch>(`/batches/${id}/skip`, { method: "POST" }),
   confirmBatch: (id: string) =>
     request<Batch>(`/batches/${id}/confirm`, {
       method: "POST",
