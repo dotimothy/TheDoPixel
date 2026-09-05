@@ -10,10 +10,11 @@ optional cleanup without deleting the authoritative source originals.
 Requirements: Windows 10/11 or Windows Server 2016+, an internet connection, and
 WinGet (included with current Windows releases).
 
-Open PowerShell in the cloned project folder and run:
+Double-click `install-windows.bat`, or open Command Prompt in the cloned project
+folder and run:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
+```bat
+install-windows.bat
 ```
 
 The installer adds missing prerequisites through WinGet (`uv`, Node.js LTS, and
@@ -30,9 +31,12 @@ After installation, start it by double-clicking `pixel-relay.cmd` or running:
 Use `-SkipAdb` with the installer if the appliance will use FTP exclusively, or
 `-NoStart` to install without starting the server:
 
-```powershell
-.\install-windows.ps1 -SkipAdb -NoStart
+```bat
+install-windows.bat -SkipAdb -NoStart
 ```
+
+The batch file forwards all options to the PowerShell installer, so the existing
+`.ps1` entry point remains available for scripted deployments.
 
 Runtime state defaults to `%LOCALAPPDATA%\PixelRelay`. Browser uploads default to
 the repository's `data` folder unless `PIXEL_RELAY_IMPORT_ROOT` is configured.
