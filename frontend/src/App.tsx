@@ -217,6 +217,7 @@ export default function App() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [serverStopped, setServerStopped] = useState(false);
+  const [shuttingDown, setShuttingDown] = useState(false);
   const [fullscreen, setFullscreen] = useState(Boolean(document.fullscreenElement));
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = useState(
@@ -503,6 +504,18 @@ export default function App() {
     setTab(nextTab);
   }
 
+  async function shutdownServer() {
+    if (!window.confirm("Shut down TheDoPixel server? Active transfers will stop safely and can resume after restart.")) return;
+    setShuttingDown(true);
+    try {
+      await api.shutdownServer();
+      setServerStopped(true);
+    } catch (error) {
+      setShuttingDown(false);
+      report(error instanceof Error ? error.message : "Could not shut down the server", "bad");
+    }
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -572,6 +585,17 @@ export default function App() {
             >
               {fullscreen ? <Icons.fullscreenExit /> : <Icons.fullscreen />}
               <span>{fullscreen ? "Exit" : "Fullscreen"}</span>
+            </button>
+            <button
+              className="top-action-button shutdown-button"
+              type="button"
+              aria-label="Shut down server"
+              title="Shut down server"
+              disabled={shuttingDown}
+              onClick={() => void shutdownServer()}
+            >
+              <Icons.power />
+              <span>{shuttingDown ? "Stopping…" : "Shut down"}</span>
             </button>
             <span className="avatar">{user.username.slice(0, 2).toUpperCase()}</span>
           </div>

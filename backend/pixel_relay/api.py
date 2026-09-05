@@ -21,6 +21,7 @@ from typing import Annotated
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     FastAPI,
     File,
@@ -210,6 +211,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.events = events
     app.state.auth = auth
     app.state.worker = worker
+    app.state.shutdown_callback = None
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -359,6 +361,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "configured": auth.has_admin(),
             "version": app.version,
         }
+
+    @router.post("/server/shutdown", status_code=202)
+    async def shutdown_server(background_tasks: BackgroundTasks, user: MutatingUser) -> dict:
+        callback = app.state.shutdown_callback
+        if not callable(callback):
+            raise DomainError(
+                "server_shutdown_unavailable",
+                "This server process does not expose graceful shutdown control",
+                status_code=409,
+            )
+        db.audit("server.shutdown", "server", user_id=user["user_id"])
+        events.request_shutdown()
+        background_tasks.add_task(callback)
+        return {"shutdown_requested": True}
 
     @router.post("/auth/login")
     async def login(payload: LoginRequest, request: Request, response: Response) -> dict:

@@ -85,6 +85,8 @@ main { min-width: 0; }
 .top-action-button svg { width: 15px; }
 .install-button { border-color: #285752; color: #7dd1c8; background: #102522; }
 .install-button:hover:not(:disabled) { border-color: var(--cyan); color: #dcfffa; }
+.shutdown-button { border-color: #623c3c; color: #d58b84; }
+.shutdown-button:hover:not(:disabled) { border-color: #b85b52; color: #ffd9d5; }
 .notification-button.enabled { border-color: #4c446e; color: #b9aaff; background: #1d1931; }
 .guide-button { border-color: #3d4e61; color: #a9bad2; background: #131d2a; }
 .avatar { display: grid; place-items: center; width: 30px; height: 30px; background: #1b2a34; border: 1px solid #2e3f4a; border-radius: 50%; color: #b8c7cf; font-size: 9px; font-weight: 700; }

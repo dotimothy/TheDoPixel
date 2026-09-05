@@ -90,6 +90,8 @@ export const api = {
     return user;
   },
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
+  shutdownServer: () =>
+    request<{ shutdown_requested: true }>("/server/shutdown", { method: "POST" }),
   dashboard: () => request<Dashboard>("/dashboard"),
   stopQueue: () => request<QueueSummary>("/queue/stop", { method: "POST" }),
   startQueue: () => request<QueueSummary>("/queue/start", { method: "POST" }),

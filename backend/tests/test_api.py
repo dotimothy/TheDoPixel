@@ -53,6 +53,44 @@ def test_health_is_public_but_dashboard_is_private(tmp_path: Path) -> None:
         assert client.get("/api/v1/dashboard").status_code == 401
 
 
+def test_authenticated_user_can_request_graceful_server_shutdown(tmp_path: Path) -> None:
+    app = configured_app(tmp_path)
+    callbacks: list[str] = []
+    app.state.shutdown_callback = lambda: callbacks.append("shutdown")
+
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "a secure local password"},
+        )
+        response = client.post(
+            "/api/v1/server/shutdown",
+            headers={"X-CSRF-Token": login.json()["csrf_token"]},
+        )
+
+    assert response.status_code == 202
+    assert response.json() == {"shutdown_requested": True}
+    assert callbacks == ["shutdown"]
+    assert app.state.events.shutdown_requested is True
+
+
+def test_server_shutdown_requires_runtime_control(tmp_path: Path) -> None:
+    app = configured_app(tmp_path)
+
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "a secure local password"},
+        )
+        response = client.post(
+            "/api/v1/server/shutdown",
+            headers={"X-CSRF-Token": login.json()["csrf_token"]},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "server_shutdown_unavailable"
+
+
 def test_dashboard_separates_active_batch_from_five_other_in_progress_batches(
     tmp_path: Path,
 ) -> None:

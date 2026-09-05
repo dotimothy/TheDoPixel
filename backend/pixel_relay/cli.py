@@ -71,6 +71,13 @@ class TheDoPixelServer(uvicorn.Server):
                 self.force_exit = True
             return
 
+        self.request_shutdown()
+
+    def request_shutdown(self) -> None:
+        """Notify connected dashboards, then gracefully stop the HTTP server."""
+        if self._shutdown_notice_sent:
+            return
+
         self._shutdown_notice_sent = True
         self.events.request_shutdown()
         try:
@@ -443,6 +450,7 @@ def serve(
         ),
         application.state.events,
     )
+    application.state.shutdown_callback = server.request_shutdown
     try:
         server.run()
     finally:

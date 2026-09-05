@@ -62,6 +62,9 @@ export const Icons = {
   logout: (props: IconProps) => (
     <Icon {...props}><path d="M10 5H4v14h6M14 8l4 4-4 4M8 12h10" /></Icon>
   ),
+  power: (props: IconProps) => (
+    <Icon {...props}><path d="M12 2v10M6.3 5.7a8 8 0 1 0 11.4 0" /></Icon>
+  ),
   fullscreen: (props: IconProps) => (
     <Icon {...props}><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5" /></Icon>
   ),
