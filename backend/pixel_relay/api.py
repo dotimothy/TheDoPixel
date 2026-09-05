@@ -2111,26 +2111,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if result.returncode != 0:
             raise DomainError("app_update_failed", result.stderr.strip() or result.stdout.strip() or "Git update failed", status_code=409)
         updated = "Already up to date" not in result.stdout
-        if updated:
-            uv = shutil.which("uv")
-            npm = shutil.which("npm")
-            if not uv or not npm:
-                raise DomainError("app_update_tools_missing", "The update was downloaded, but uv and npm are required to finish installing it", status_code=409)
-            commands = [
-                [uv, "sync", "--project", str(root)],
-                [npm, "--prefix", str(root / "frontend"), "ci"],
-                [npm, "--prefix", str(root / "frontend"), "run", "build"],
-            ]
-            for command in commands:
-                installed = subprocess.run(command, cwd=root, capture_output=True, text=True, check=False)
-                if installed.returncode != 0:
-                    raise DomainError("app_update_install_failed", installed.stderr.strip() or installed.stdout.strip() or "Update installation failed", status_code=409)
-            db.audit("app.update", "server", user_id=user["user_id"])
-            events.request_shutdown("restart")
-            background_tasks.add_task(restart_callback)
+        uv = shutil.which("uv")
+        npm = shutil.which("npm")
+        if not uv or not npm:
+            raise DomainError("app_update_tools_missing", "uv and npm are required to install and rebuild the app", status_code=409)
+        commands = [
+            [uv, "sync", "--project", str(root)],
+            [npm, "--prefix", str(root / "frontend"), "ci"],
+            [npm, "--prefix", str(root / "frontend"), "run", "build"],
+        ]
+        for command in commands:
+            installed = subprocess.run(command, cwd=root, capture_output=True, text=True, check=False)
+            if installed.returncode != 0:
+                raise DomainError("app_update_install_failed", installed.stderr.strip() or installed.stdout.strip() or "Update installation failed", status_code=409)
+        db.audit("app.update", "server", user_id=user["user_id"])
+        events.request_shutdown("restart")
+        background_tasks.add_task(restart_callback)
         return {
             "updated": updated,
-            "restarting": updated,
+            "restarting": True,
             "message": result.stdout.strip() or "Repository updated",
         }
 

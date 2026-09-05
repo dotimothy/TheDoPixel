@@ -2269,7 +2269,7 @@ function Settings({ report, advanced }: { report: (message: string, type?: Notic
   async function updateApp() {
     if (!window.confirm("Download and install the latest app updates? TheDoPixel will restart automatically if an update is found.")) return;
     setUpdatingApp(true);
-    try { const result = await api.updateApp(); report(result.restarting ? "Update installed; TheDoPixel is restarting" : "App is already up to date"); }
+    try { const result = await api.updateApp(); report(result.updated ? "Update installed; TheDoPixel is restarting" : "App files rebuilt; TheDoPixel is restarting"); }
     catch (error) { report(error instanceof Error ? error.message : "App update failed", "bad"); }
     finally { setUpdatingApp(false); }
   }
