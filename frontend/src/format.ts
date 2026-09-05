@@ -77,6 +77,18 @@ export function pathBaseName(path: string): string {
   return parts.at(-1) || "";
 }
 
+export function sourceRelativeFolder(filePath: string, rootPath: string): string {
+  const file = filePath.replaceAll("\\", "/").replace(/\/+$/, "");
+  const root = rootPath.replaceAll("\\", "/").replace(/\/+$/, "");
+  const prefix = `${root}/`;
+  const relative = file.toLowerCase().startsWith(prefix.toLowerCase())
+    ? file.slice(prefix.length)
+    : file.split("/").at(-1) || file;
+  const parts = relative.split("/").filter(Boolean);
+  parts.pop();
+  return parts.join("/") || ".";
+}
+
 export function googlePhotosDateSearch(
   items: { mtime_ns?: number }[]
 ): { href: string; dateLabel: string } | null {

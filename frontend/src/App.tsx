@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "./api";
-import { batchProgress, bytes, dateTime, duration, googlePhotosBatchDateSearch, label, mediaScanProgress, parentFolderName, pathBaseName, relativeTime, shortPath, storageUtilization } from "./format";
+import { batchProgress, bytes, dateTime, duration, googlePhotosBatchDateSearch, label, mediaScanProgress, parentFolderName, pathBaseName, relativeTime, shortPath, sourceRelativeFolder, storageUtilization } from "./format";
 import { Icons } from "./Icons";
 import type {
   AuditEntry,
@@ -34,6 +34,7 @@ import type {
 type Tab = "overview" | "batches" | "sources" | "audit" | "settings";
 type BatchFilter = "all" | "processing" | "ready" | "confirmed" | "attention" | "cancelled";
 type Notice = { type: "good" | "bad"; message: string };
+type UiMode = "simple" | "advanced";
 type InstallChoice = { outcome: "accepted" | "dismissed"; platform: string };
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -204,6 +205,10 @@ function matchesBatchFilter(batch: Batch, filter: BatchFilter): boolean {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
+  const [uiMode, setUiMode] = useState<UiMode>(() => {
+    try { return localStorage.getItem("pixel-relay-ui-mode") === "advanced" ? "advanced" : "simple"; }
+    catch { return "simple"; }
+  });
   const query = new URLSearchParams(window.location.search);
   const requestedTab = query.get("tab");
   const [tab, setTab] = useState<Tab>(
@@ -232,6 +237,12 @@ export default function App() {
   const readyBatches = useRef<Set<string> | null>(null);
   const stalledBatches = useRef<Set<string> | null>(null);
   const quickStartChecked = useRef(false);
+  const visibleNav = uiMode === "advanced" ? nav : nav.filter(({ id }) => id !== "audit");
+
+  useEffect(() => {
+    if (uiMode === "simple" && tab === "audit") setTab("overview");
+    try { localStorage.setItem("pixel-relay-ui-mode", uiMode); } catch { /* Mode still works for this session. */ }
+  }, [uiMode, tab]);
 
   const refreshDashboard = useCallback(async () => {
     try {
@@ -517,16 +528,16 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${uiMode}-mode`}>
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark"><span /><span /><span /><span /></div>
           <div><strong>TheDoPixel</strong><small>MEDIA APPLIANCE</small></div>
         </div>
         <nav>
-          {nav.map(({ id, label: navLabel, icon: NavIcon }) => (
+          {visibleNav.map(({ id, label: navLabel, icon: NavIcon }) => (
             <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
-              <NavIcon /><span>{navLabel}</span>
+              <NavIcon /><span>{uiMode === "simple" ? ({ overview: "Home", batches: "Backups", sources: "Choose Photos", settings: "Setup" } as Partial<Record<Tab, string>>)[id] || navLabel : navLabel}</span>
             </button>
           ))}
         </nav>
@@ -544,6 +555,10 @@ export default function App() {
           <div className="eyebrow">THE DO LAB / THE DO PIXEL</div>
           <div className="top-actions">
             <span className="secure-label">PRIVATE NETWORK</span>
+            <div className="ui-mode-toggle" role="group" aria-label="Interface detail level">
+              <button type="button" className={uiMode === "simple" ? "active" : ""} onClick={() => setUiMode("simple")}>Simple</button>
+              <button type="button" className={uiMode === "advanced" ? "active" : ""} onClick={() => setUiMode("advanced")}>Advanced</button>
+            </div>
             <button
               className="top-action-button guide-button"
               type="button"
@@ -601,9 +616,9 @@ export default function App() {
           </div>
         </header>
         <div className="mobile-nav">
-          {nav.map(({ id, label: navLabel, icon: NavIcon }) => (
+          {visibleNav.map(({ id, label: navLabel, icon: NavIcon }) => (
             <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
-              <NavIcon /><span>{navLabel}</span>
+              <NavIcon /><span>{uiMode === "simple" ? ({ overview: "Home", batches: "Backups", sources: "Choose Photos", settings: "Setup" } as Partial<Record<Tab, string>>)[id] || navLabel : navLabel}</span>
             </button>
           ))}
         </div>
@@ -612,7 +627,7 @@ export default function App() {
           {tab === "batches" && <Batches queue={dashboard?.queue} refreshQueue={refreshDashboard} report={report} requestedBatchId={requestedBatchId} batchRequestHandled={() => setRequestedBatchId(null)} />}
           {tab === "sources" && <Sources report={report} />}
           {tab === "audit" && <Audit />}
-          {tab === "settings" && <Settings report={report} />}
+          {tab === "settings" && <Settings report={report} advanced={uiMode === "advanced"} />}
         </section>
       </main>
       {notice && <div className={`toast ${notice.type}`} role={notice.type === "bad" ? "alert" : "status"}>
@@ -624,17 +639,18 @@ export default function App() {
       {showQuickStart && <div className="quick-start-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeQuickStart()}>
         <section className="quick-start-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-start-title">
           <button type="button" className="drawer-close" aria-label="Close first-time guide" onClick={closeQuickStart}><Icons.close /></button>
-          <span className="panel-kicker">FIRST-TIME GUIDE</span>
-          <h2 id="quick-start-title">From source folder to a safe Pixel upload</h2>
-          <p className="quick-start-intro">Follow these five steps. Pixel Relay keeps your source originals and only removes its Pixel copies when you explicitly purge them.</p>
+          <span className="panel-kicker">LET’S GET STARTED</span>
+          <h2 id="quick-start-title">Back up your photos in five easy steps</h2>
+          <p className="quick-start-intro"><strong>Your original files are safe.</strong> TheDoPixel only copies them. It never deletes them from your computer or storage drive.</p>
           <ol className="quick-start-list">
-            <li><b>1</b><div><strong>Connect and unlock the Pixel</strong><span>Enable USB debugging, approve this computer, and unlock with the PIN after every reboot. If you use an adopted drive, connect it before refreshing. The Overview target-storage status should turn green.</span></div></li>
-            <li><b>2</b><div><strong>Choose the connection</strong><span>In Settings, select USB, network ADB, or FTP and save. USB is simplest for a first run; use the connection test before moving a large batch.</span></div></li>
-            <li><b>3</b><div><strong>Add and scan a source</strong><span>Open Sources, choose a folder on this server, and scan it. The service account needs read permission. Photos, RAW files, and videos such as MP4 are included.</span></div></li>
-            <li><b>4</b><div><strong>Create a batch</strong><span>Filter the scan, select the files, name the batch, and create it. Leave the Pixel and any storage drive connected while the queue transfers and scans the media.</span></div></li>
-            <li><b>5</b><div><strong>Verify, then purge</strong><span>When the batch says Ready to verify, confirm that Google Photos finished backing it up. Mark it verified in Batches, then purge the Pixel copies when you want the space back.</span></div></li>
+            <li><b>1</b><div><strong>Plug in and unlock your Pixel</strong><span>Connect the USB cable, unlock the phone, and tap Allow if the phone asks whether to trust this computer.</span></div></li>
+            <li><b>2</b><div><strong>Check that the Pixel says Connected</strong><span>Look for the green Connected status on the Home screen. If it is not green, reconnect the cable and choose Refresh device.</span></div></li>
+            <li><b>3</b><div><strong>Choose the folder with your photos</strong><span>Open Choose Photos, add your main photo folder, and choose Scan now. You can then select only the subfolders you want.</span></div></li>
+            <li><b>4</b><div><strong>Select photos and start the backup</strong><span>Tick a whole subfolder or individual files, then choose Create batch. Keep the Pixel connected while TheDoPixel copies them.</span></div></li>
+            <li><b>5</b><div><strong>Check Google Photos</strong><span>When TheDoPixel says Ready to verify, open Google Photos and make sure the backup finished. Then choose I verified this batch. Removing the temporary Pixel copies afterward is optional.</span></div></li>
           </ol>
-          <div className="quick-start-actions"><button type="button" className="secondary" onClick={() => continueQuickStart("settings")}>Open Settings</button><button type="button" className="primary" onClick={() => continueQuickStart("sources")}>Start with Sources</button></div>
+          <div className="quick-start-help">Need technical controls or diagnostics? Switch to <strong>Advanced</strong> at the top of the screen at any time.</div>
+          <div className="quick-start-actions"><button type="button" className="secondary" onClick={() => continueQuickStart("overview")}>Check my Pixel</button><button type="button" className="primary" onClick={() => continueQuickStart("sources")}>Choose my photos</button></div>
         </section>
       </div>}
       {showNotificationPrompt && <div className="notification-prompt-backdrop" role="presentation">
@@ -909,7 +925,7 @@ function Overview({ dashboard, refresh, report, openBatch }: { dashboard: Dashbo
     <>
       <div className="page-heading">
         <div><div className="page-kicker">OPERATIONS</div><h1>Good {timeGreeting()}. <span>Here’s the relay.</span></h1></div>
-        <div className="page-heading-actions"><button className="secondary" onClick={restartAdbServer} disabled={restartingAdbServer}><Icons.refresh className={restartingAdbServer ? "spin" : ""} /> {restartingAdbServer ? "Restarting ADB…" : "Restart ADB server"}</button><button className="secondary" onClick={refreshDevice} disabled={refreshing}><Icons.refresh className={refreshing ? "spin" : ""} /> Refresh device</button></div>
+        <div className="page-heading-actions"><button className="secondary advanced-only" onClick={restartAdbServer} disabled={restartingAdbServer}><Icons.refresh className={restartingAdbServer ? "spin" : ""} /> {restartingAdbServer ? "Restarting ADB…" : "Restart ADB server"}</button><button className="secondary" onClick={refreshDevice} disabled={refreshing}><Icons.refresh className={refreshing ? "spin" : ""} /> Refresh device</button></div>
       </div>
       <div className="device-banner">
         <div className="device-illustration"><Icons.phone /><span className={device.state === "device" ? "online" : ""} /></div>
@@ -940,7 +956,7 @@ function Overview({ dashboard, refresh, report, openBatch }: { dashboard: Dashbo
       {device.error && <div className="alert-strip"><Icons.warning /> <div><strong>Device needs attention</strong><span>{device.error}</span></div></div>}
       <section className="network-panel">
         <div className="network-panel-head"><Icons.network /><div><span className="panel-kicker">PIXEL NETWORK</span><strong>{device.network_type ? label(device.network_type) : device.connection_mode === "ftp" ? "FTP connection" : "Network unavailable"}</strong><div className="network-port-control"><label>ADB port<input type="number" min="1" max="65535" inputMode="numeric" value={adbPort} onChange={(event) => setAdbPort(event.target.value)} aria-invalid={!adbPortValid} /></label><button type="button" className="secondary small" onClick={copyIp} disabled={!copyableIp}>Copy IP</button></div><button type="button" className="secondary small network-adb-button" onClick={enableAdbOverIp} disabled={enablingNetworkAdb || !adbPortValid}><Icons.network /> {enablingNetworkAdb ? "Enabling…" : device.connection_mode === "network" && device.state === "device" ? "Reconfigure ADB over IP" : "Enable ADB over IP"}</button></div></div>
-        <div className="network-settings">
+        <div className="network-settings advanced-only">
           <span><small>Interface</small><b>{device.network_interface || "—"}</b></span>
           <span><small>IP address</small><b title={networkAddresses.join(", ")}>{networkAddresses.join(", ") || "—"}</b></span>
           <span><small>Gateway</small><b>{device.network_gateway || "—"}</b></span>
@@ -983,7 +999,7 @@ function Overview({ dashboard, refresh, report, openBatch }: { dashboard: Dashbo
           <a className="secondary photos-open" href="https://photos.google.com/" target="_blank" rel="noreferrer"><Icons.photos /> Open Google Photos</a>
         </section>
       </div>
-      <TelemetryPanel />
+      <div className="advanced-only"><TelemetryPanel /></div>
     </>
   );
 }
@@ -1383,7 +1399,7 @@ function Batches({ queue, refreshQueue, report, requestedBatchId, batchRequestHa
         </div>
       </section>}
       <section className="panel">
-        <div className="batch-filter-bar" role="group" aria-label="Filter batches">
+        <div className="batch-filter-bar advanced-only" role="group" aria-label="Filter batches">
           {filters.map(({ id, label: filterLabel }) => (
             <button key={id} className={filter === id ? "active" : ""} onClick={() => setFilter(id)}>
               {filterLabel} <b>{batches.filter((batch) => matchesBatchFilter(batch, id)).length}</b>
@@ -1391,7 +1407,7 @@ function Batches({ queue, refreshQueue, report, requestedBatchId, batchRequestHa
           ))}
           <small>“Photos confirmed” means manually verified in Pixel Relay.</small>
         </div>
-        <div className="batch-bulk-bar">
+        <div className="batch-bulk-bar advanced-only">
           <label className="batch-select-all">
             <input
               type="checkbox"
@@ -1416,10 +1432,10 @@ function Batches({ queue, refreshQueue, report, requestedBatchId, batchRequestHa
             <button type="button" className="secondary small" disabled={bulkBusy || !selectedBatchIds.size} onClick={() => setSelectedBatchIds(new Set())}>Clear</button>
           </div>
         </div>
-        <div className="table-head batch-selectable-head"><span /><span>Batch</span><span>Progress</span><span>Size</span><span>Created</span><span /></div>
+        <div className="table-head batch-selectable-head advanced-only"><span /><span>Batch</span><span>Progress</span><span>Size</span><span>Created</span><span /></div>
         <div className="batch-list">
           {visibleBatches.map((batch) => <div className={`selectable-batch-row ${selectedBatchIds.has(batch.id) ? "selected" : ""}`} key={batch.id}>
-            <label className="batch-select" title={`Select ${batch.name}`}>
+            <label className="batch-select advanced-only" title={`Select ${batch.name}`}>
               <input
                 type="checkbox"
                 aria-label={`Select ${batch.name}`}
@@ -1788,6 +1804,29 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
     (file) => availableRootIds.has(file.root_id) && !excludedBatchSources.has(file.root_id)
   );
   const eligibleFiles = includedFiles.filter((file) => !(file.active_item_count || 0));
+  const rootsById = new Map(roots.map((root) => [root.id, root]));
+  const filesByFolder = new Map<string, SourceFile[]>();
+  for (const file of eligibleFiles) {
+    const root = rootsById.get(file.root_id);
+    if (!root) continue;
+    const containingFolder = sourceRelativeFolder(file.path, root.path);
+    const folderParts = containingFolder === "." ? [] : containingFolder.split("/");
+    const selectableFolders = folderParts.length
+      ? folderParts.map((_part, index) => folderParts.slice(0, index + 1).join("/"))
+      : ["."];
+    for (const folder of selectableFolders) {
+      const key = `${file.root_id}:${folder}`;
+      filesByFolder.set(key, [...(filesByFolder.get(key) || []), file]);
+    }
+  }
+  const folderGroups = [...filesByFolder.entries()]
+    .map(([key, folderFiles]) => ({
+      key,
+      files: folderFiles,
+      root: rootsById.get(folderFiles[0].root_id)!,
+      folder: key.slice(key.indexOf(":") + 1)
+    }))
+    .sort((left, right) => `${left.root.name}/${left.folder}`.localeCompare(`${right.root.name}/${right.folder}`));
   const activeFileCount = includedFiles.length - eligibleFiles.length;
   const matchesMediaFilter = (file: SourceFile) => mediaFilter === "all"
     || (mediaFilter === "raw" && isRaw(file))
@@ -1840,6 +1879,14 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
         [...previous].filter((fileId) => !sourceFileIds.has(fileId))
       ));
     }
+  }
+  function toggleFolder(folderFiles: SourceFile[]) {
+    const selectFolder = folderFiles.some((file) => !selected.has(file.id));
+    setSelected((previous) => {
+      const next = new Set(previous);
+      folderFiles.forEach((file) => selectFolder ? next.add(file.id) : next.delete(file.id));
+      return next;
+    });
   }
   async function removeRoot(root: SourceRoot) {
     if (!window.confirm(`Remove “${root.name}” from TheDoPixel?\n\nThe folder and every original file will remain untouched.`)) return;
@@ -1924,7 +1971,7 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
                         : "Scan now"}
                     </button>
                     <button
-                      className="secondary small scan-full"
+                      className="secondary small scan-full advanced-only"
                       disabled={!root.available || busy}
                       title="Recalculate SHA-256 for every media file"
                       onClick={() => startScan(root, true)}
@@ -1986,7 +2033,20 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
               <button type="button" disabled={includedSourceCount === 0} onClick={() => { setExcludedBatchSources(new Set(roots.map((root) => root.id))); setSelected(new Set()); setVisibleFileLimit(sourceFileRenderChunk); }}>Include none</button>
             </div>}
           </div>
-          <div className="history-filter" role="group" aria-label="Transfer history">
+          {folderGroups.length > 0 && <div className="subfolder-picker">
+            <div className="batch-source-heading"><div><strong>Choose subfolders</strong><small>Select a whole subfolder with one click, or choose individual files below.</small></div><span>{folderGroups.length.toLocaleString()} folder{folderGroups.length === 1 ? "" : "s"}</span></div>
+            <div className="subfolder-options">
+              {folderGroups.map((group) => {
+                const selectedCount = group.files.filter((file) => selected.has(file.id)).length;
+                const allSelected = selectedCount === group.files.length;
+                return <button type="button" className={`${allSelected ? "selected" : ""} ${selectedCount && !allSelected ? "partial" : ""}`} key={group.key} onClick={() => toggleFolder(group.files)}>
+                  <span className="folder-check">{allSelected ? "✓" : selectedCount ? "−" : ""}</span>
+                  <span><strong>{group.folder === "." ? "Top level" : group.folder}</strong><small>{group.root.name} · {selectedCount.toLocaleString()} of {group.files.length.toLocaleString()} selected</small></span>
+                </button>;
+              })}
+            </div>
+          </div>}
+          <div className="history-filter advanced-only" role="group" aria-label="Transfer history">
             <span>History</span>
             <button type="button" className={historyFilter === "all" ? "active" : ""} onClick={() => { setHistoryFilter("all"); setVisibleFileLimit(sourceFileRenderChunk); }}>All <b>{mediaEligibleFiles.length.toLocaleString()}</b></button>
             <button type="button" className={historyFilter === "new" ? "active" : ""} onClick={() => { setHistoryFilter("new"); setVisibleFileLimit(sourceFileRenderChunk); }}>Never batched <b>{newCount.toLocaleString()}</b></button>
@@ -2014,17 +2074,17 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
             </div>
             {planError && <p>{planError}</p>}
             {batchPlan && !planning && <>
-              <div className="batch-plan-stats">
+              <div className="batch-plan-stats advanced-only">
                 <span>Unique media<b>{batchPlan.unique_content_count.toLocaleString()}</b></span>
                 <span>Total size<b>{bytes(batchPlan.total_bytes)}</b></span>
                 <span>Per-part limit<b>{bytes(batchPlan.batch_byte_limit)}</b></span>
                 <span>Pixel reserve<b>{bytes(batchPlan.storage_reserve_bytes)}</b></span>
               </div>
-              {(batchPlan.duplicate_selection_count > 0 || batchPlan.previously_processed_count > 0) && <div className="batch-plan-warning">
+              {(batchPlan.duplicate_selection_count > 0 || batchPlan.previously_processed_count > 0) && <div className="batch-plan-warning advanced-only">
                 {batchPlan.duplicate_selection_count > 0 && <span>{batchPlan.duplicate_selection_count} duplicate selection{batchPlan.duplicate_selection_count === 1 ? "" : "s"} will be collapsed by content hash.</span>}
                 {batchPlan.previously_processed_count > 0 && <span>{batchPlan.previously_processed_count} file{batchPlan.previously_processed_count === 1 ? "" : "s"} appeared in an earlier batch; {batchPlan.previously_purged_count} were previously purged.</span>}
               </div>}
-              <div className="batch-plan-parts">
+              <div className="batch-plan-parts advanced-only">
                 {batchPlan.parts.map((part, index) => <span key={`${part.folder}-${index}`}><b>{index + 1}</b><span><strong>{part.name}</strong><small>{part.file_count.toLocaleString()} files · {bytes(part.total_bytes)} · {part.photo_count} photos · {part.raw_count} RAW · {part.video_count} videos</small></span></span>)}
               </div>
             </>}
@@ -2082,7 +2142,7 @@ function Audit() {
   </>;
 }
 
-function Settings({ report }: { report: (message: string, type?: Notice["type"]) => void }) {
+function Settings({ report, advanced }: { report: (message: string, type?: Notice["type"]) => void; advanced: boolean }) {
   const [settings, setSettings] = useState<RelaySettings | null>(null);
   const [draft, setDraft] = useState<RelaySettings | null>(null);
   const [ftpPassword, setFtpPassword] = useState("");
@@ -2277,8 +2337,8 @@ function Settings({ report }: { report: (message: string, type?: Notice["type"])
           </div>
         </section>
         <section className="panel setting-card editable-card"><span className="panel-kicker">STORAGE PATHS</span><h2>Pixel and source locations</h2><label>Folder within selected Pixel storage<input value={form.destination_root} onChange={(event) => update("destination_root", event.target.value)} /></label><small className="field-hint">Keep this beneath <code>/sdcard</code>. The storage-medium selector changes what Android mounts at <code>/sdcard</code>, so this folder path does not need to change when switching between phone storage and an adopted drive.</small><div className="storage-buffer-control"><ByteSlider label="Pixel free-space buffer" value={form.reserve_bytes} minimum={0} maximum={form.pixel_internal_storage_bytes || Math.max(1, form.reserve_bytes)} disabled={!form.pixel_internal_storage_bytes} onChange={(value) => update("reserve_bytes", value)} /><small className="field-hint">{form.pixel_internal_storage_bytes ? <>Transfers pause before available Pixel storage falls below this buffer. Maximum: {bytes(form.pixel_internal_storage_bytes)} measured internal storage. The default is 10 GiB.</> : <>Connect and refresh the Pixel to measure internal storage before adjusting this buffer.</>}</small></div><label>TheDoPixel import root<div className="path-picker"><input value={form.import_root || ""} onChange={(event) => update("import_root", event.target.value)} placeholder="Absolute local or network path for browser imports" /><button type="button" className="secondary small" onClick={() => setServerBrowserOpen(true)}>Browse server…</button></div></label><small className="field-hint">This is a folder visible to the Pixel Relay host. Files selected with Upload media come from the browser client and are copied here.</small></section>
-        <section className="panel setting-card editable-card"><span className="panel-kicker">BATCH GUARDRAILS</span><h2>Transfer limits</h2><div className="editable-grid"><NumericSlider label="Maximum files per batch" value={form.max_batch_files} min={1} max={100000} step={1} format={(value) => value.toLocaleString()} onChange={(value) => update("max_batch_files", value)} /><ByteSlider label="Maximum bytes" value={form.max_batch_bytes} minimum={1} onChange={(value) => update("max_batch_bytes", value)} /></div><small className="field-hint">Pixel Relay also considers current Pixel free space and the safety reserve. Oversized selections are balanced into sequential parts. Once a part is fully staged, the next part can start without Google Photos confirmation if its whole payload fits; otherwise it waits for space. Files from different source folders remain separate batches.</small></section>
-        <section className="panel setting-card editable-card"><span className="panel-kicker">THERMAL SAFETY</span><h2>Temperature thresholds</h2><div className="editable-grid"><NumericSlider label="Pause at" value={form.pause_temperature_c} min={30} max={80} step={0.1} format={(value) => `${value.toFixed(1)} °C`} onChange={(value) => update("pause_temperature_c", value)} /><NumericSlider label="Resume below" value={form.resume_temperature_c} min={20} max={75} step={0.1} format={(value) => `${value.toFixed(1)} °C`} onChange={(value) => update("resume_temperature_c", value)} /></div><small className="field-hint">Resume must remain below the pause threshold.</small></section>
+        {advanced && <section className="panel setting-card editable-card"><span className="panel-kicker">BATCH GUARDRAILS</span><h2>Transfer limits</h2><div className="editable-grid"><NumericSlider label="Maximum files per batch" value={form.max_batch_files} min={1} max={100000} step={1} format={(value) => value.toLocaleString()} onChange={(value) => update("max_batch_files", value)} /><ByteSlider label="Maximum bytes" value={form.max_batch_bytes} minimum={1} onChange={(value) => update("max_batch_bytes", value)} /></div><small className="field-hint">Pixel Relay also considers current Pixel free space and the safety reserve. Oversized selections are balanced into sequential parts. Once a part is fully staged, the next part can start without Google Photos confirmation if its whole payload fits; otherwise it waits for space. Files from different source folders remain separate batches.</small></section>}
+        {advanced && <section className="panel setting-card editable-card"><span className="panel-kicker">THERMAL SAFETY</span><h2>Temperature thresholds</h2><div className="editable-grid"><NumericSlider label="Pause at" value={form.pause_temperature_c} min={30} max={80} step={0.1} format={(value) => `${value.toFixed(1)} °C`} onChange={(value) => update("pause_temperature_c", value)} /><NumericSlider label="Resume below" value={form.resume_temperature_c} min={20} max={75} step={0.1} format={(value) => `${value.toFixed(1)} °C`} onChange={(value) => update("resume_temperature_c", value)} /></div><small className="field-hint">Resume must remain below the pause threshold.</small></section>}
         <StorageSelector
           choices={storageOptions}
           value={form.expected_primary_uuid}
@@ -2287,7 +2347,7 @@ function Settings({ report }: { report: (message: string, type?: Notice["type"])
           select={(uuid) => update("expected_primary_uuid", uuid)}
           report={report}
         />
-        <PixelStorageManager report={report} />
+        {advanced && <PixelStorageManager report={report} />}
       </div>
     </form>
     {serverBrowserOpen && <ServerDirectoryBrowser

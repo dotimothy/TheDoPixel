@@ -10,6 +10,7 @@ import {
   parentFolderName,
   pathBaseName,
   shortPath,
+  sourceRelativeFolder,
   storageUtilization
 } from "./format";
 
@@ -57,6 +58,15 @@ describe("dashboard formatting", () => {
 
   it("uses a selected source folder as its default display name", () => {
     expect(pathBaseName("/Volumes/NAS/Family archive/")).toBe("Family archive");
+  });
+
+  it("finds selectable subfolders beneath POSIX and Windows source roots", () => {
+    expect(sourceRelativeFolder("/Volumes/Photos/Trips/Italy/photo.jpg", "/Volumes/Photos"))
+      .toBe("Trips/Italy");
+    expect(sourceRelativeFolder("E:\\Photos\\Family\\2025\\photo.jpg", "e:\\photos\\"))
+      .toBe("Family/2025");
+    expect(sourceRelativeFolder("/Volumes/Photos/photo.jpg", "/Volumes/Photos"))
+      .toBe(".");
   });
 
   it("builds a Google Photos search for a completed batch date", () => {
