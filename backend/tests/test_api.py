@@ -108,7 +108,11 @@ def test_app_update_rebuilds_and_restarts_when_git_is_already_current(
 
     def run(command, **_kwargs):
         commands.append(command)
-        stdout = "Already up to date.\n" if command[:2] == ["git", "pull"] else ""
+        stdout = (
+            "Already up to date.\n"
+            if command[0].endswith("git") and command[1:2] == ["pull"]
+            else ""
+        )
         return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
 
     monkeypatch.setattr(api_module.subprocess, "run", run)
@@ -128,8 +132,8 @@ def test_app_update_rebuilds_and_restarts_when_git_is_already_current(
     assert response.json()["restarting"] is True
     assert callbacks == ["restart"]
     assert commands == [
-        ["git", "status", "--porcelain"],
-        ["git", "pull", "--ff-only"],
+        ["/tools/git", "status", "--porcelain"],
+        ["/tools/git", "pull", "--ff-only"],
         ["/tools/uv", "sync", "--project", str(checkout)],
         ["/tools/npm", "--prefix", str(checkout / "frontend"), "ci"],
         ["/tools/npm", "--prefix", str(checkout / "frontend"), "run", "build"],
@@ -159,6 +163,32 @@ def test_windows_command_launchers_use_cmd_exe(tmp_path: Path, monkeypatch) -> N
         "/c",
     ]
     assert "npm.cmd" in captured[0][4]
+
+
+def test_windows_finds_git_bundled_with_github_desktop(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    local_app_data = tmp_path / "LocalAppData"
+    bundled_git = (
+        local_app_data
+        / "GitHubDesktop"
+        / "app-3.5.2"
+        / "resources"
+        / "app"
+        / "git"
+        / "cmd"
+        / "git.exe"
+    )
+    bundled_git.parent.mkdir(parents=True)
+    bundled_git.touch()
+    monkeypatch.setattr(api_module.sys, "platform", "win32")
+    monkeypatch.setattr(api_module.shutil, "which", lambda _name: None)
+    monkeypatch.setenv("LOCALAPPDATA", str(local_app_data))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "User"))
+    monkeypatch.setenv("PROGRAMFILES", str(tmp_path / "Program Files"))
+
+    assert api_module.maintenance_tool("git") == str(bundled_git)
 
 
 def test_dashboard_separates_active_batch_from_five_other_in_progress_batches(

@@ -89,6 +89,45 @@ def application_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def maintenance_tool(name: str) -> str | None:
+    discovered = shutil.which(name)
+    if discovered or sys.platform != "win32":
+        return discovered
+
+    local_app_data = Path(os.environ.get("LOCALAPPDATA", ""))
+    user_profile = Path(os.environ.get("USERPROFILE", ""))
+    program_files = Path(os.environ.get("PROGRAMFILES", ""))
+    candidates: list[Path] = []
+    if name == "git":
+        candidates.extend(
+            sorted(
+                local_app_data.glob("GitHubDesktop/app-*/resources/app/git/cmd/git.exe"),
+                reverse=True,
+            )
+        )
+        candidates.extend(
+            [
+                program_files / "Git" / "cmd" / "git.exe",
+                local_app_data / "Programs" / "Git" / "cmd" / "git.exe",
+            ]
+        )
+    elif name == "uv":
+        candidates.extend(
+            [
+                user_profile / ".local" / "bin" / "uv.exe",
+                local_app_data / "Microsoft" / "WinGet" / "Links" / "uv.exe",
+            ]
+        )
+    elif name == "npm":
+        candidates.extend(
+            [
+                program_files / "nodejs" / "npm.cmd",
+                local_app_data / "Programs" / "nodejs" / "npm.cmd",
+            ]
+        )
+    return next((str(candidate) for candidate in candidates if candidate.is_file()), None)
+
+
 def run_local_command(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
     """Run a fixed local maintenance command, including Windows batch launchers."""
     effective_command = command
@@ -113,9 +152,12 @@ def run_local_command(command: list[str], *, cwd: Path) -> subprocess.CompletedP
 
 
 def application_revision() -> str | None:
+    git = maintenance_tool("git")
+    if not git:
+        return None
     try:
         result = run_local_command(
-            ["git", "rev-parse", "--short", "HEAD"],
+            [git, "rev-parse", "--short", "HEAD"],
             cwd=application_root(),
         )
     except OSError:
@@ -2146,8 +2188,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise DomainError(
                 "app_update_unavailable", "This installation is not a Git checkout", status_code=409
             )
+        git = maintenance_tool("git")
+        if not git:
+            raise DomainError(
+                "app_update_tools_missing",
+                "Git was not found. Install Git or GitHub Desktop, then restart TheDoPixel.",
+                status_code=409,
+            )
         try:
-            status = run_local_command(["git", "status", "--porcelain"], cwd=root)
+            status = run_local_command([git, "status", "--porcelain"], cwd=root)
         except OSError as exc:
             raise DomainError(
                 "app_update_command_failed",
@@ -2167,7 +2216,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=409,
             )
         try:
-            result = run_local_command(["git", "pull", "--ff-only"], cwd=root)
+            result = run_local_command([git, "pull", "--ff-only"], cwd=root)
         except OSError as exc:
             raise DomainError(
                 "app_update_command_failed",
@@ -2181,8 +2230,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=409,
             )
         updated = "Already up to date" not in result.stdout
-        uv = shutil.which("uv")
-        npm = shutil.which("npm")
+        uv = maintenance_tool("uv")
+        npm = maintenance_tool("npm")
         if not uv or not npm:
             raise DomainError(
                 "app_update_tools_missing",
