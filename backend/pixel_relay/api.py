@@ -91,40 +91,65 @@ def application_root() -> Path:
 
 def maintenance_tool(name: str) -> str | None:
     discovered = shutil.which(name)
-    if discovered or sys.platform != "win32":
+    if discovered:
         return discovered
 
-    local_app_data = Path(os.environ.get("LOCALAPPDATA", ""))
-    user_profile = Path(os.environ.get("USERPROFILE", ""))
-    program_files = Path(os.environ.get("PROGRAMFILES", ""))
     candidates: list[Path] = []
-    if name == "git":
-        candidates.extend(
-            sorted(
-                local_app_data.glob("GitHubDesktop/app-*/resources/app/git/cmd/git.exe"),
-                reverse=True,
+    if sys.platform == "win32":
+        local_app_data = Path(os.environ.get("LOCALAPPDATA", ""))
+        user_profile = Path(os.environ.get("USERPROFILE", ""))
+        program_files = Path(os.environ.get("PROGRAMFILES", ""))
+        if name == "git":
+            candidates.extend(
+                sorted(
+                    local_app_data.glob("GitHubDesktop/app-*/resources/app/git/cmd/git.exe"),
+                    reverse=True,
+                )
             )
-        )
-        candidates.extend(
-            [
-                program_files / "Git" / "cmd" / "git.exe",
-                local_app_data / "Programs" / "Git" / "cmd" / "git.exe",
-            ]
-        )
-    elif name == "uv":
-        candidates.extend(
-            [
-                user_profile / ".local" / "bin" / "uv.exe",
-                local_app_data / "Microsoft" / "WinGet" / "Links" / "uv.exe",
-            ]
-        )
-    elif name == "npm":
-        candidates.extend(
-            [
-                program_files / "nodejs" / "npm.cmd",
-                local_app_data / "Programs" / "nodejs" / "npm.cmd",
-            ]
-        )
+            candidates.extend(
+                [
+                    program_files / "Git" / "cmd" / "git.exe",
+                    local_app_data / "Programs" / "Git" / "cmd" / "git.exe",
+                ]
+            )
+        elif name == "uv":
+            candidates.extend(
+                [
+                    user_profile / ".local" / "bin" / "uv.exe",
+                    local_app_data / "Microsoft" / "WinGet" / "Links" / "uv.exe",
+                ]
+            )
+        elif name == "npm":
+            candidates.extend(
+                [
+                    program_files / "nodejs" / "npm.cmd",
+                    local_app_data / "Programs" / "nodejs" / "npm.cmd",
+                ]
+            )
+    elif sys.platform == "darwin":
+        home = Path.home()
+        if name == "git":
+            candidates.extend(
+                [
+                    Path("/Applications/GitHub Desktop.app/Contents/Resources/app/git/bin/git"),
+                    home
+                    / "Applications"
+                    / "GitHub Desktop.app"
+                    / "Contents"
+                    / "Resources"
+                    / "app"
+                    / "git"
+                    / "bin"
+                    / "git",
+                    Path("/opt/homebrew/bin/git"),
+                    Path("/usr/local/bin/git"),
+                    Path("/usr/bin/git"),
+                ]
+            )
+        elif name == "uv":
+            candidates.extend([home / ".local" / "bin" / "uv", Path("/opt/homebrew/bin/uv")])
+        elif name == "npm":
+            candidates.extend([Path("/opt/homebrew/bin/npm"), Path("/usr/local/bin/npm")])
     return next((str(candidate) for candidate in candidates if candidate.is_file()), None)
 
 

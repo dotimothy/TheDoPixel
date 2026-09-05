@@ -50,6 +50,9 @@ chmod +x install-unix.sh
 ./install-unix.sh
 ```
 
+On macOS, you can instead double-click `install-macos.command`. If macOS blocks
+the first launch, Control-click the file, choose **Open**, then confirm **Open**.
+
 On macOS it uses Homebrew, installing Homebrew first when necessary. On Linux it
 supports apt, dnf, yum, pacman, zypper, and apk. Missing `uv`, Node.js/npm, and
 Android Platform Tools are installed before the locked Python environment and
