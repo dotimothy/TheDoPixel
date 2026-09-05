@@ -1451,6 +1451,10 @@ class Repository:
                       'awaiting_backup_confirmation',
                       'confirmed_backed_up',
                       'cancelled',
+                      'cancelled_on_pixel',
+                      'transfer_failed',
+                      'media_scan_failed',
+                      'purge_failed',
                       'purged_from_pixel'
                     )
                 )
@@ -1908,6 +1912,10 @@ class Repository:
                           'awaiting_backup_confirmation',
                           'confirmed_backed_up',
                           'cancelled',
+                          'cancelled_on_pixel',
+                          'transfer_failed',
+                          'media_scan_failed',
+                          'purge_failed',
                           'purged_from_pixel'
                         )
                     )

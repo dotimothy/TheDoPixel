@@ -443,6 +443,35 @@ def test_storage_limited_series_advances_before_confirmation_only_when_next_part
     assert repository.next_work_item(available_bytes=13)["batch_id"] == second["id"]
 
 
+@pytest.mark.parametrize(
+    "failed_state",
+    [ItemState.TRANSFER_FAILED, ItemState.MEDIA_SCAN_FAILED, ItemState.CANCELLED_ON_PIXEL],
+)
+def test_storage_limited_series_continues_after_items_needing_attention(
+    repository: Repository,
+    tmp_path: Path,
+    failed_state: ItemState,
+) -> None:
+    root_path = tmp_path / "continue-after-failure"
+    root_path.mkdir()
+    for name, content in (("a.jpg", b"12345678"), ("b.jpg", b"abcdefgh")):
+        (root_path / name).write_bytes(content)
+    root = repository.add_root("Failures", str(root_path))
+    files = repository.scan_root(root["id"])["files"]
+    first, second = repository.create_batches("Failures", [file["id"] for file in files], 1, max_bytes=8)
+    first_item = first["items"][0]["id"]
+
+    if failed_state == ItemState.MEDIA_SCAN_FAILED:
+        repository.transition(first_item, ItemState.TRANSFERRING)
+        repository.transition(first_item, ItemState.STAGED_ON_PIXEL)
+    elif failed_state == ItemState.CANCELLED_ON_PIXEL:
+        repository.transition(first_item, ItemState.TRANSFERRING)
+    repository.transition(first_item, failed_state)
+
+    assert repository.get_batch(second["id"])["series_blocked"] is False
+    assert repository.next_work_item(available_bytes=8)["batch_id"] == second["id"]
+
+
 def test_different_source_folders_create_distinct_batches_and_keep_names(
     repository: Repository, tmp_path: Path
 ) -> None:
