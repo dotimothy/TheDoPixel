@@ -1,8 +1,8 @@
 import asyncio
 import json
+import subprocess
 import threading
 import time
-import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -134,6 +134,31 @@ def test_app_update_rebuilds_and_restarts_when_git_is_already_current(
         ["/tools/npm", "--prefix", str(checkout / "frontend"), "ci"],
         ["/tools/npm", "--prefix", str(checkout / "frontend"), "run", "build"],
     ]
+
+
+def test_windows_command_launchers_use_cmd_exe(tmp_path: Path, monkeypatch) -> None:
+    captured: list[list[str]] = []
+    monkeypatch.setattr(api_module.os, "name", "nt")
+    monkeypatch.setenv("COMSPEC", r"C:\Windows\System32\cmd.exe")
+
+    def run(command, **_kwargs):
+        captured.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(api_module.subprocess, "run", run)
+
+    api_module.run_local_command(
+        [r"C:\Program Files\nodejs\npm.cmd", "--prefix", r"C:\TheDoPixel\frontend", "ci"],
+        cwd=tmp_path,
+    )
+
+    assert captured[0][:4] == [
+        r"C:\Windows\System32\cmd.exe",
+        "/d",
+        "/s",
+        "/c",
+    ]
+    assert "npm.cmd" in captured[0][4]
 
 
 def test_dashboard_separates_active_batch_from_five_other_in_progress_batches(

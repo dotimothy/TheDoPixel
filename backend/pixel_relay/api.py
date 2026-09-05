@@ -89,14 +89,37 @@ def application_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def application_revision() -> str | None:
-    result = subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"],
-        cwd=application_root(),
+def run_local_command(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
+    """Run a fixed local maintenance command, including Windows batch launchers."""
+    effective_command = command
+    if os.name == "nt" and command[0].lower().endswith((".bat", ".cmd")):
+        command_processor = os.environ.get("COMSPEC", "cmd.exe")
+        effective_command = [
+            command_processor,
+            "/d",
+            "/s",
+            "/c",
+            subprocess.list2cmdline(command),
+        ]
+    return subprocess.run(
+        effective_command,
+        cwd=cwd,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
+
+
+def application_revision() -> str | None:
+    try:
+        result = run_local_command(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=application_root(),
+        )
+    except OSError:
+        return None
     revision = result.stdout.strip()
     return revision if result.returncode == 0 and revision else None
 
@@ -2114,31 +2137,80 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         root = application_root()
         restart_callback = app.state.restart_callback
         if not callable(restart_callback):
-            raise DomainError("app_restart_unavailable", "This server process cannot restart itself", status_code=409)
+            raise DomainError(
+                "app_restart_unavailable",
+                "This server process cannot restart itself",
+                status_code=409,
+            )
         if not (root / ".git").is_dir():
-            raise DomainError("app_update_unavailable", "This installation is not a Git checkout", status_code=409)
-        status = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True, check=False)
+            raise DomainError(
+                "app_update_unavailable", "This installation is not a Git checkout", status_code=409
+            )
+        try:
+            status = run_local_command(["git", "status", "--porcelain"], cwd=root)
+        except OSError as exc:
+            raise DomainError(
+                "app_update_command_failed",
+                f"Could not start Git: {exc}",
+                status_code=409,
+            ) from exc
         if status.returncode != 0:
-            raise DomainError("app_update_failed", status.stderr.strip() or "Could not inspect the Git checkout", status_code=500)
+            raise DomainError(
+                "app_update_failed",
+                status.stderr.strip() or "Could not inspect the Git checkout",
+                status_code=500,
+            )
         if status.stdout.strip():
-            raise DomainError("app_update_dirty", "Update skipped because the local Git checkout has uncommitted changes", status_code=409)
-        result = subprocess.run(["git", "pull", "--ff-only"], cwd=root, capture_output=True, text=True, check=False)
+            raise DomainError(
+                "app_update_dirty",
+                "Update skipped because the local Git checkout has uncommitted changes",
+                status_code=409,
+            )
+        try:
+            result = run_local_command(["git", "pull", "--ff-only"], cwd=root)
+        except OSError as exc:
+            raise DomainError(
+                "app_update_command_failed",
+                f"Could not pull the Git update: {exc}",
+                status_code=409,
+            ) from exc
         if result.returncode != 0:
-            raise DomainError("app_update_failed", result.stderr.strip() or result.stdout.strip() or "Git update failed", status_code=409)
+            raise DomainError(
+                "app_update_failed",
+                result.stderr.strip() or result.stdout.strip() or "Git update failed",
+                status_code=409,
+            )
         updated = "Already up to date" not in result.stdout
         uv = shutil.which("uv")
         npm = shutil.which("npm")
         if not uv or not npm:
-            raise DomainError("app_update_tools_missing", "uv and npm are required to install and rebuild the app", status_code=409)
+            raise DomainError(
+                "app_update_tools_missing",
+                "uv and npm are required to install and rebuild the app",
+                status_code=409,
+            )
         commands = [
             [uv, "sync", "--project", str(root)],
             [npm, "--prefix", str(root / "frontend"), "ci"],
             [npm, "--prefix", str(root / "frontend"), "run", "build"],
         ]
         for command in commands:
-            installed = subprocess.run(command, cwd=root, capture_output=True, text=True, check=False)
+            try:
+                installed = run_local_command(command, cwd=root)
+            except OSError as exc:
+                raise DomainError(
+                    "app_update_command_failed",
+                    f"Could not start {Path(command[0]).name}: {exc}",
+                    status_code=409,
+                ) from exc
             if installed.returncode != 0:
-                raise DomainError("app_update_install_failed", installed.stderr.strip() or installed.stdout.strip() or "Update installation failed", status_code=409)
+                raise DomainError(
+                    "app_update_install_failed",
+                    installed.stderr.strip()
+                    or installed.stdout.strip()
+                    or "Update installation failed",
+                    status_code=409,
+                )
         db.audit("app.update", "server", user_id=user["user_id"])
         events.request_shutdown("restart")
         background_tasks.add_task(restart_callback)
