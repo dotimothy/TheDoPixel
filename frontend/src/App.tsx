@@ -559,7 +559,7 @@ export default function App() {
         </div>
         <nav>
           {visibleNav.map(({ id, label: navLabel, icon: NavIcon }) => (
-            <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
+            <button key={id} className={tab === id ? "active" : ""} aria-current={tab === id ? "page" : undefined} onClick={() => setTab(id)}>
               <NavIcon /><span>{uiMode === "simple" ? ({ overview: "Home", batches: "Backups", sources: "Choose Photos", settings: "Setup" } as Partial<Record<Tab, string>>)[id] || navLabel : navLabel}</span>
             </button>
           ))}
@@ -640,7 +640,7 @@ export default function App() {
         </header>
         <div className="mobile-nav">
           {visibleNav.map(({ id, label: navLabel, icon: NavIcon }) => (
-            <button key={id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
+            <button key={id} className={tab === id ? "active" : ""} aria-current={tab === id ? "page" : undefined} onClick={() => setTab(id)}>
               <NavIcon /><span>{uiMode === "simple" ? ({ overview: "Home", batches: "Backups", sources: "Choose Photos", settings: "Setup" } as Partial<Record<Tab, string>>)[id] || navLabel : navLabel}</span>
             </button>
           ))}

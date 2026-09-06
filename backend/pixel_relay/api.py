@@ -158,12 +158,16 @@ def run_local_command(command: list[str], *, cwd: Path) -> subprocess.CompletedP
     effective_command = command
     if os.name == "nt" and command[0].lower().endswith((".bat", ".cmd")):
         command_processor = os.environ.get("COMSPEC", "cmd.exe")
+        # cmd.exe /S /C strips the first and last quote from its command
+        # argument. Keep an outer pair around list2cmdline's quoted launcher
+        # so paths such as C:\Program Files\nodejs\npm.cmd remain executable.
+        command_line = subprocess.list2cmdline(command)
         effective_command = [
             command_processor,
             "/d",
             "/s",
             "/c",
-            subprocess.list2cmdline(command),
+            f'"{command_line}"',
         ]
     return subprocess.run(
         effective_command,

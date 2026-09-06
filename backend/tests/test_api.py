@@ -162,7 +162,10 @@ def test_windows_command_launchers_use_cmd_exe(tmp_path: Path, monkeypatch) -> N
         "/s",
         "/c",
     ]
-    assert "npm.cmd" in captured[0][4]
+    assert captured[0][4] == (
+        r'""C:\Program Files\nodejs\npm.cmd" '
+        r'--prefix C:\TheDoPixel\frontend ci"'
+    )
 
 
 def test_windows_finds_git_bundled_with_github_desktop(
