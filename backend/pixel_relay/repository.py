@@ -300,7 +300,7 @@ class Repository:
                     """
                     UPDATE source_files
                     SET root_id=?, sha256=?, size=?, mtime_ns=?, extension=?, media_kind=?,
-                        discovered_at=?
+                        discovered_at=?, missing_at=NULL
                     WHERE id=?
                     """,
                     (
@@ -380,6 +380,7 @@ class Repository:
         }
         ready: list[dict[str, Any]] = []
         skipped: list[dict[str, str]] = []
+        issue_paths: list[Path] = []
         seen: set[Path] = set()
         visited_directories: set[Path] = set()
         pending: dict[Future[str], dict[str, Any]] = {}
@@ -422,6 +423,7 @@ class Repository:
                 )
 
         def record_issue(path: Path, exc: Exception) -> None:
+            issue_paths.append(path.resolve(strict=False))
             skipped.append({"path": str(path), "reason": str(exc)})
             report("enumerating", path.name)
 
@@ -544,7 +546,8 @@ class Repository:
                       mtime_ns=excluded.mtime_ns,
                       extension=excluded.extension,
                       media_kind=excluded.media_kind,
-                      discovered_at=excluded.discovered_at
+                      discovered_at=excluded.discovered_at,
+                      missing_at=NULL
                     RETURNING id
                     """,
                     (
@@ -566,6 +569,23 @@ class Repository:
                         "root_name": root["name"],
                     }
                 )
+            seen_paths = {str(path) for path in seen}
+            missing_ids: list[int] = []
+            for existing_path, existing in existing_by_path.items():
+                path = local_path(existing_path).resolve(strict=False)
+                in_scan_scope = any(
+                    path == target or path.is_relative_to(target) for target in scan_targets
+                )
+                scan_issue_covers_path = any(
+                    path == issue or path.is_relative_to(issue) for issue in issue_paths
+                )
+                if in_scan_scope and existing_path not in seen_paths and not scan_issue_covers_path:
+                    missing_ids.append(existing["id"])
+            if missing_ids:
+                connection.executemany(
+                    "UPDATE source_files SET missing_at=COALESCE(missing_at, ?) WHERE id=?",
+                    [(discovered_at, file_id) for file_id in missing_ids],
+                )
         discovered.sort(key=lambda item: item["path"])
         report("complete")
         logger.info(
@@ -584,6 +604,7 @@ class Repository:
                     "hash_workers": hash_workers,
                     "full_verify": full_verify,
                     "selected_scan": bool(selected_paths),
+                    "missing_count": len(missing_ids),
                 }
             },
         )
@@ -597,6 +618,7 @@ class Repository:
                 "hashed": hashed,
                 "hash_workers": hash_workers,
                 "full_verify": full_verify,
+                "missing": len(missing_ids),
             },
         }
 
@@ -631,6 +653,7 @@ class Repository:
             JOIN source_roots ON source_roots.id=source_files.root_id
             JOIN content_history ON content_history.sha256=source_files.sha256
             WHERE source_roots.enabled=1
+            AND source_files.missing_at IS NULL
             AND source_files.path NOT LIKE '%/._%'
             {exclusion}
             ORDER BY source_files.discovered_at DESC
@@ -650,7 +673,7 @@ class Repository:
             raise DomainError("empty_batch", "Select at least one source file")
         placeholders = ",".join("?" for _ in unique_ids)
         files = self.db.fetchall(
-            f"SELECT * FROM source_files WHERE id IN ({placeholders})",
+            f"SELECT * FROM source_files WHERE missing_at IS NULL AND id IN ({placeholders})",
             tuple(unique_ids),
         )
         if len(files) != len(unique_ids):

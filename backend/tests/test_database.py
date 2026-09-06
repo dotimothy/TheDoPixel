@@ -43,7 +43,7 @@ def test_v1_database_migrates_and_classifies_existing_videos(tmp_path: Path) -> 
     video = database.fetchone("SELECT media_kind FROM source_files WHERE id=1")
     version = database.fetchone("SELECT version FROM schema_version")
     assert video == {"media_kind": "video"}
-    assert version == {"version": 12}
+    assert version == {"version": 13}
 
 
 def test_default_batch_limits_are_6000_files_and_400_gib(tmp_path: Path) -> None:
@@ -51,6 +51,19 @@ def test_default_batch_limits_are_6000_files_and_400_gib(tmp_path: Path) -> None
 
     assert settings.max_batch_files == 6_000
     assert settings.max_batch_bytes == 400 * 1024**3
+
+
+def test_existing_database_adds_source_missing_marker(tmp_path: Path) -> None:
+    database = Database(tmp_path / "existing.sqlite3")
+    database.migrate()
+    database.execute("DELETE FROM schema_version")
+    database.execute("INSERT INTO schema_version(version) VALUES (12)")
+
+    database.migrate()
+
+    columns = {row["name"] for row in database.fetchall("PRAGMA table_info(source_files)")}
+    assert "missing_at" in columns
+    assert database.fetchone("SELECT version FROM schema_version") == {"version": 13}
 
 
 def test_v11_default_batch_limits_migrate(

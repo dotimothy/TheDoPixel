@@ -1764,7 +1764,13 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
   const [serverBrowserOpen, setServerBrowserOpen] = useState(false);
   const [scanProgress, setScanProgress] = useState<Record<number, ScanProgress>>({});
   const fileInput = useRef<HTMLInputElement>(null);
-  const load = async () => { const [nextRoots, nextFiles] = await Promise.all([api.sources(), api.files()]); setRoots(nextRoots); setFiles(nextFiles); };
+  const load = async () => {
+    const [nextRoots, nextFiles] = await Promise.all([api.sources(), api.files()]);
+    const currentFileIds = new Set(nextFiles.map((file) => file.id));
+    setRoots(nextRoots);
+    setFiles(nextFiles);
+    setSelected((current) => new Set([...current].filter((fileId) => currentFileIds.has(fileId))));
+  };
   useEffect(() => { void load(); }, []);
   useEffect(() => {
     const stream = new EventSource("/api/v1/events");

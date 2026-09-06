@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS source_files (
   mtime_ns INTEGER NOT NULL,
   extension TEXT NOT NULL,
   media_kind TEXT NOT NULL DEFAULT 'photo' CHECK(media_kind IN ('photo', 'video')),
-  discovered_at TEXT NOT NULL
+  discovered_at TEXT NOT NULL,
+  missing_at TEXT
 );
 CREATE INDEX IF NOT EXISTS source_files_sha256_idx ON source_files(sha256);
 CREATE TABLE IF NOT EXISTS batches (
@@ -150,6 +151,8 @@ class Database:
                 connection.execute(
                     "ALTER TABLE source_files ADD COLUMN media_kind TEXT NOT NULL DEFAULT 'photo'"
                 )
+            if "missing_at" not in columns:
+                connection.execute("ALTER TABLE source_files ADD COLUMN missing_at TEXT")
             batch_columns = {
                 row["name"] for row in connection.execute("PRAGMA table_info(batches)").fetchall()
             }
@@ -247,7 +250,7 @@ class Database:
                     (utcnow(),),
                 )
             connection.execute("DELETE FROM schema_version")
-            connection.execute("INSERT INTO schema_version(version) VALUES (12)")
+            connection.execute("INSERT INTO schema_version(version) VALUES (13)")
 
     @contextlib.contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:

@@ -236,6 +236,63 @@ def test_incremental_scan_reuses_hashes_and_full_verify_rehashes(
     assert len(hashed_paths) == 5
 
 
+def test_rescan_hides_deleted_files_and_restores_reappearing_files(
+    repository: Repository,
+    tmp_path: Path,
+) -> None:
+    root_path = tmp_path / "refresh-deletions"
+    root_path.mkdir()
+    retained = root_path / "retained.jpg"
+    deleted = root_path / "deleted.jpg"
+    retained.write_bytes(b"retained")
+    deleted.write_bytes(b"deleted")
+    root = repository.add_root("Refresh", str(root_path))
+    first = repository.scan_root(root["id"])
+    deleted_record = next(file for file in first["files"] if file["path"] == str(deleted))
+    historical_batch = repository.create_batch("History", [deleted_record["id"]], 1)
+
+    deleted.unlink()
+    refreshed = repository.scan_root(root["id"])
+
+    assert refreshed["stats"]["missing"] == 1
+    assert [file["path"] for file in repository.list_files()] == [str(retained)]
+    assert repository.get_batch(historical_batch["id"])["items"][0]["path"] == str(deleted)
+    with pytest.raises(DomainError, match="no longer exist"):
+        repository.plan_batches("Stale", [deleted_record["id"]])
+
+    deleted.write_bytes(b"returned")
+    restored = repository.scan_root(root["id"])
+
+    assert restored["stats"]["missing"] == 0
+    restored_record = next(file for file in repository.list_files() if file["path"] == str(deleted))
+    assert restored_record["id"] == deleted_record["id"]
+    assert restored_record["missing_at"] is None
+
+
+def test_selected_subfolder_scan_only_retires_deleted_files_in_that_scope(
+    repository: Repository,
+    tmp_path: Path,
+) -> None:
+    root_path = tmp_path / "selected-refresh"
+    selected_folder = root_path / "selected"
+    other_folder = root_path / "other"
+    selected_folder.mkdir(parents=True)
+    other_folder.mkdir()
+    selected_file = selected_folder / "selected.jpg"
+    other_file = other_folder / "other.jpg"
+    selected_file.write_bytes(b"selected")
+    other_file.write_bytes(b"other")
+    root = repository.add_root("Selected refresh", str(root_path))
+    repository.scan_root(root["id"])
+    selected_file.unlink()
+    other_file.unlink()
+
+    refreshed = repository.scan_root(root["id"], selected_paths=[str(selected_folder)])
+
+    assert refreshed["stats"]["missing"] == 1
+    assert [file["path"] for file in repository.list_files()] == [str(other_file)]
+
+
 def test_transfer_progress_is_persisted_and_aggregated(
     repository: Repository, tmp_path: Path
 ) -> None:
@@ -458,7 +515,9 @@ def test_storage_limited_series_continues_after_items_needing_attention(
         (root_path / name).write_bytes(content)
     root = repository.add_root("Failures", str(root_path))
     files = repository.scan_root(root["id"])["files"]
-    first, second = repository.create_batches("Failures", [file["id"] for file in files], 1, max_bytes=8)
+    first, second = repository.create_batches(
+        "Failures", [file["id"] for file in files], 1, max_bytes=8
+    )
     first_item = first["items"][0]["id"]
 
     if failed_state == ItemState.MEDIA_SCAN_FAILED:
