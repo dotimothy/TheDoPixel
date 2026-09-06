@@ -319,6 +319,16 @@ export interface BatchItem {
   updated_at: string;
 }
 
+export interface FailedBatchItem extends BatchItem {
+  batch_name: string;
+}
+
+export interface FailedItemInventory {
+  total: number;
+  batch_count: number;
+  items: FailedBatchItem[];
+}
+
 export interface Batch {
   id: string;
   name: string;

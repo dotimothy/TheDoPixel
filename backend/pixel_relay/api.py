@@ -1960,6 +1960,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def batches(_user: Authenticated) -> list[dict]:
         return [enrich_batch(batch) for batch in repository.list_batches()]
 
+    @router.get("/batches/failed-items")
+    async def failed_batch_items(
+        _user: Authenticated,
+        limit: int = Query(default=500, ge=1, le=1000),
+    ) -> dict:
+        return repository.list_failed_items(limit=limit)
+
+    @router.post("/batches/failed-items/retry")
+    async def retry_all_failed_batch_items(user: MutatingUser) -> dict:
+        result = repository.retry_all_failed_items(user["user_id"])
+        worker.wake()
+        await events.publish("batch", {"action": "retry_all", **result})
+        return result
+
     @router.get("/backups/items")
     async def backed_up_items(
         _user: Authenticated,

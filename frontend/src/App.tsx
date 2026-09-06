@@ -14,6 +14,7 @@ import type {
   DeviceTelemetry,
   DeviceTelemetryPoint,
   FtpSpeedTestResult,
+  FailedItemInventory,
   ItemState,
   PixelStorage,
   QueueSummary,
@@ -1159,14 +1160,18 @@ function MetricCard({ label: cardLabel, value, sub, accent, text = false }: { la
 
 function Batches({ queue, refreshQueue, report, requestedBatchId, batchRequestHandled }: { queue?: QueueSummary; refreshQueue: () => Promise<void>; report: (message: string, type?: Notice["type"]) => void; requestedBatchId: string | null; batchRequestHandled: () => void }) {
   const [batches, setBatches] = useState<Batch[]>([]);
+  const [failures, setFailures] = useState<FailedItemInventory>({ total: 0, batch_count: 0, items: [] });
   const [backupSummary, setBackupSummary] = useState<BackedUpInventory | null>(null);
   const [selected, setSelected] = useState<Batch | null>(null);
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [retryAllBusy, setRetryAllBusy] = useState(false);
   const [filter, setFilter] = useState<BatchFilter>("all");
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
-    setBatches(await api.batches());
+    const [nextBatches, nextFailures] = await Promise.all([api.batches(), api.failedItems()]);
+    setBatches(nextBatches);
+    setFailures(nextFailures);
     if (selected) setSelected(await api.batch(selected.id));
     setLoading(false);
   }, [selected?.id]);
@@ -1325,6 +1330,22 @@ function Batches({ queue, refreshQueue, report, requestedBatchId, batchRequestHa
       setBulkBusy(false);
     }
   }
+  async function retryAllFailedItems() {
+    if (!failures.total) return;
+    setRetryAllBusy(true);
+    try {
+      const result = await api.retryAllFailedItems();
+      await Promise.all([load(), refreshQueue()]);
+      report(
+        `${result.retried} failed ${result.retried === 1 ? "item" : "items"} queued again across `
+        + `${result.batch_count} ${result.batch_count === 1 ? "batch" : "batches"}`
+      );
+    } catch (error) {
+      report(error instanceof Error ? error.message : "Failed items could not be retried", "bad");
+    } finally {
+      setRetryAllBusy(false);
+    }
+  }
   async function verifyAllReady() {
     if (!readyToVerify.length) return;
     const count = readyToVerify.length;
@@ -1405,6 +1426,23 @@ function Batches({ queue, refreshQueue, report, requestedBatchId, batchRequestHa
     <>
       <div className="page-heading"><div><div className="page-kicker">RELAY WORK</div><h1>Batches <span>& queue</span></h1><p>Every file keeps a complete, restart-safe state history.</p></div><div className="page-heading-actions"><button type="button" className="primary amber" disabled={bulkBusy || !readyToVerify.length} onClick={() => void verifyAllReady()}>{bulkBusy ? "Updating…" : `Verify all ready (${readyToVerify.length})`}</button><button type="button" className="danger" disabled={bulkBusy || !allBatchesVerified || !verifiedToPurge.length} title={!allBatchesVerified ? "Every non-cancelled batch must be verified first" : undefined} onClick={() => void purgeAllVerified()}>{bulkBusy ? "Updating…" : `Purge all verified (${verifiedToPurge.length})`}</button><button type="button" className="secondary" disabled={bulkBusy} onClick={() => void load()}><Icons.refresh /> Refresh</button></div></div>
       <QueueControl queue={queue} activeBatch={activeBatch} refresh={refreshQueue} report={report} />
+      <section className={`panel failed-items-panel ${failures.total ? "has-failures" : ""}`}>
+        <div className="panel-head">
+          <div><span className="panel-kicker">RETRY CENTER</span><h2>{failures.total ? `${failures.total.toLocaleString()} failed ${failures.total === 1 ? "item" : "items"}` : "No failed items"}</h2></div>
+          <div className="failed-items-heading-action">
+            <small>{failures.total ? `Across ${failures.batch_count.toLocaleString()} ${failures.batch_count === 1 ? "batch" : "batches"}` : "Anything that needs another try will appear here."}</small>
+            {failures.total > 0 && <button type="button" className="primary" disabled={retryAllBusy} onClick={() => void retryAllFailedItems()}><Icons.refresh /> {retryAllBusy ? "Queuing…" : "Retry all failed items"}</button>}
+          </div>
+        </div>
+        {failures.total > 0 && <div className="item-list failed-item-list">
+          {failures.items.map((item) => <div className="item-row failed-item-row" key={item.id}>
+            <span className={`state-dot ${item.state}`} />
+            <div><strong title={item.path}>{shortPath(item.path)}</strong><small>{item.batch_name} · {bytes(item.size)} · Attempt {item.attempts.toLocaleString()}</small>{item.error_detail && <span className="item-error"><em>{item.error_detail}</em><CopyButton text={item.error_detail} /></span>}</div>
+            <div className="failed-item-actions"><span className={`state ${item.state}`}>{label(item.state)}</span><button type="button" className="secondary small" onClick={() => void api.batch(item.batch_id).then(setSelected).catch((error) => report(error instanceof Error ? error.message : "Batch could not be opened", "bad"))}>Open batch</button></div>
+          </div>)}
+        </div>}
+        {failures.items.length < failures.total && <div className="failed-items-footer">Showing the {failures.items.length.toLocaleString()} most recent failures. Retry all includes all {failures.total.toLocaleString()}.</div>}
+      </section>
       <section className="panel unique-upload-panel">
         <div className="panel-head"><div><span className="panel-kicker">ALL-TIME UNIQUE TOTALS</span><h2>Unique relay uploads</h2></div><small>Confirmed and awaiting-verification files, deduplicated together by SHA-256.</small></div>
         {backupSummary ? <div className="backed-up-summary">

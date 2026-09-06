@@ -1254,6 +1254,40 @@ class Repository:
         )
         return {row["state"]: row["count"] for row in rows}
 
+    def list_failed_items(self, *, limit: int = 500) -> dict[str, Any]:
+        states = sorted(state.value for state in self._retryable_states(True))
+        placeholders = ",".join("?" for _ in states)
+        summary = self.db.fetchone(
+            f"""
+            SELECT COUNT(*) AS total, COUNT(DISTINCT batch_items.batch_id) AS batch_count
+            FROM batch_items
+            JOIN batches ON batches.id=batch_items.batch_id
+            WHERE batch_items.state IN ({placeholders})
+              AND batches.cancelled_at IS NULL
+            """,
+            tuple(states),
+        )
+        items = self.db.fetchall(
+            f"""
+            SELECT batch_items.*, batches.name AS batch_name,
+              source_files.path, source_files.sha256, source_files.size,
+              source_files.mtime_ns, source_files.extension, source_files.media_kind
+            FROM batch_items
+            JOIN batches ON batches.id=batch_items.batch_id
+            JOIN source_files ON source_files.id=batch_items.source_file_id
+            WHERE batch_items.state IN ({placeholders})
+              AND batches.cancelled_at IS NULL
+            ORDER BY batch_items.updated_at DESC, batch_items.id
+            LIMIT ?
+            """,
+            (*states, limit),
+        )
+        return {
+            "total": int(summary["total"] if summary else 0),
+            "batch_count": int(summary["batch_count"] if summary else 0),
+            "items": items,
+        }
+
     def get_batch(self, batch_id: str) -> dict[str, Any]:
         batch = self.db.fetchone(
             """
@@ -2127,8 +2161,8 @@ class Repository:
             (transferred, total, utcnow(), item_id),
         )
 
-    def retry_batch(self, batch_id: str, include_purge_failures: bool, user_id: int) -> int:
-        batch = self.get_batch(batch_id)
+    @staticmethod
+    def _retryable_states(include_purge_failures: bool) -> set[ItemState]:
         states = {
             ItemState.TRANSFER_FAILED,
             ItemState.MEDIA_SCAN_FAILED,
@@ -2138,6 +2172,11 @@ class Repository:
         }
         if include_purge_failures:
             states.add(ItemState.PURGE_FAILED)
+        return states
+
+    def retry_batch(self, batch_id: str, include_purge_failures: bool, user_id: int) -> int:
+        batch = self.get_batch(batch_id)
+        states = self._retryable_states(include_purge_failures)
         count = 0
         for item in batch["items"]:
             state = ItemState(item["state"])
@@ -2155,6 +2194,26 @@ class Repository:
             count += 1
         self.db.audit("batch.retry", "batch", batch_id, user_id, {"items": count})
         return count
+
+    def retry_all_failed_items(self, user_id: int) -> dict[str, int]:
+        states = sorted(state.value for state in self._retryable_states(True))
+        placeholders = ",".join("?" for _ in states)
+        batch_ids = [
+            row["batch_id"]
+            for row in self.db.fetchall(
+                f"""
+                SELECT DISTINCT batch_items.batch_id
+                FROM batch_items
+                JOIN batches ON batches.id=batch_items.batch_id
+                WHERE batch_items.state IN ({placeholders})
+                  AND batches.cancelled_at IS NULL
+                ORDER BY batch_items.batch_id
+                """,
+                tuple(states),
+            )
+        ]
+        retried = sum(self.retry_batch(batch_id, True, user_id) for batch_id in batch_ids)
+        return {"retried": retried, "batch_count": len(batch_ids)}
 
     def confirm_batch(
         self,

@@ -238,6 +238,50 @@ def test_dashboard_separates_active_batch_from_five_other_in_progress_batches(
     assert names == list(reversed(active_names[-6:-1]))
 
 
+def test_failed_items_can_be_listed_and_retried_across_batches(tmp_path: Path) -> None:
+    app = configured_app(tmp_path)
+    source_folder = tmp_path / "failed-items"
+    source_folder.mkdir()
+    root = app.state.repository.add_root("Failures", str(source_folder))
+    batches = []
+    for index in range(2):
+        source = source_folder / f"failed-{index}.jpg"
+        source.write_bytes(f"failed-{index}".encode())
+        record = app.state.repository.register_file(source, root["id"])
+        batch = app.state.repository.create_batch(f"Failure {index}", [record["id"]], 1)
+        app.state.repository.transition(
+            batch["items"][0]["id"],
+            ItemState.TRANSFER_FAILED,
+            detail=f"failure {index}",
+            error_code="copy_failed",
+        )
+        batches.append(batch)
+
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "a secure local password"},
+        )
+        headers = {"X-CSRF-Token": login.json()["csrf_token"]}
+        listed = client.get("/api/v1/batches/failed-items")
+        retried = client.post("/api/v1/batches/failed-items/retry", headers=headers)
+
+    assert listed.status_code == 200
+    assert listed.json()["total"] == 2
+    assert listed.json()["batch_count"] == 2
+    assert {item["batch_name"] for item in listed.json()["items"]} == {
+        "Failure 0",
+        "Failure 1",
+    }
+    assert all(item["error_detail"].startswith("failure") for item in listed.json()["items"])
+    assert retried.status_code == 200
+    assert retried.json() == {"retried": 2, "batch_count": 2}
+    assert all(
+        app.state.repository.get_batch(batch["id"])["items"][0]["state"] == "queued"
+        for batch in batches
+    )
+
+
 def test_global_queue_can_drain_after_active_batch_and_resume(tmp_path: Path) -> None:
     app = configured_app(tmp_path)
     source_folder = tmp_path / "queue-control"

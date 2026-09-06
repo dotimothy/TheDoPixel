@@ -4,6 +4,7 @@ import type {
   FtpSpeedTestResult,
   Batch,
   BatchPlan,
+  FailedItemInventory,
   BackedUpInventory,
   Dashboard,
   DeviceTelemetry,
@@ -270,6 +271,11 @@ export const api = {
     return request<SourceFile>("/uploads", { method: "POST", body: form });
   },
   batches: () => request<Batch[]>("/batches"),
+  failedItems: () => request<FailedItemInventory>("/batches/failed-items"),
+  retryAllFailedItems: () =>
+    request<{ retried: number; batch_count: number }>("/batches/failed-items/retry", {
+      method: "POST"
+    }),
   backedUpItems: (limit = 250, offset = 0) =>
     request<BackedUpInventory>(`/backups/items?limit=${limit}&offset=${offset}`),
   batch: (id: string) => request<Batch>(`/batches/${id}`),

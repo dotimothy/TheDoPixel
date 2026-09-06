@@ -229,6 +229,14 @@ main { min-width: 0; }
 .queue-control.stopped { border-color: #3a4850; background: #10181d; }
 .queue-control.stopped .queue-control-state > i { background: #6e7c83; box-shadow: none; }
 .unique-upload-panel { margin-bottom: 16px; overflow: hidden; }
+.failed-items-panel { margin-bottom: 16px; overflow: hidden; }
+.failed-items-panel.has-failures { border-color: #654137; }
+.failed-items-heading-action { display: flex; align-items: center; gap: 12px; }
+.failed-items-heading-action small { color: #7e9098; font-size: 8px; }
+.failed-item-list { max-height: 440px; overflow-y: auto; border-width: 1px 0 0; border-radius: 0; }
+.failed-item-actions { display: flex; align-items: center; gap: 8px; }
+.failed-item-actions button { white-space: nowrap; }
+.failed-items-footer { padding: 10px 14px; border-top: 1px solid var(--line); color: #7e9098; font: 8px "DM Mono"; }
 .unique-upload-panel .panel-head { border-bottom: 1px solid var(--line); }
 .unique-upload-panel .panel-head > small { color: #6f838d; font-size: 8px; }
 .unique-upload-panel .backed-up-summary { border-top: 0; border-bottom: 0; }
@@ -849,6 +857,9 @@ main { min-width: 0; }
   .batch-bulk-actions { width: 100%; }
   .queue-control { align-items: stretch; flex-direction: column; }
   .queue-control > button { width: 100%; }
+  .failed-items-panel .panel-head, .failed-items-heading-action { align-items: stretch; flex-direction: column; }
+  .failed-items-heading-action button { width: 100%; }
+  .failed-item-actions { grid-column: 2; justify-content: space-between; }
   .batch-summary-row { grid-template-columns: auto minmax(0, 1fr); }
   .batch-summary-stat { grid-column: 2; justify-self: start; text-align: left; }
   .backed-up-controls { align-items: stretch; flex-direction: column; }
