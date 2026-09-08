@@ -6,7 +6,7 @@ import os
 import re
 import sys
 import uuid
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from datetime import UTC, datetime
@@ -1031,6 +1031,8 @@ class Repository:
                 parameters = (include_batch_id,)
             else:
                 batch_filter = f"WHERE {unsettled}"
+        raw_extensions = sorted(self.settings.raw_extensions)
+        raw_placeholders = ",".join("?" for _ in raw_extensions)
         rows = self.db.fetchall(
             f"""
             SELECT batches.id, batches.name, batches.created_by, batches.created_at,
@@ -1043,7 +1045,9 @@ class Repository:
               COALESCE(SUM(source_files.size), 0) AS total_bytes,
               COALESCE(SUM(batch_items.transfer_bytes), 0) AS transfer_bytes,
               SUM(CASE WHEN source_files.media_kind='photo' THEN 1 ELSE 0 END) AS photo_count,
-              SUM(CASE WHEN source_files.media_kind='video' THEN 1 ELSE 0 END) AS video_count
+              SUM(CASE WHEN source_files.media_kind='video' THEN 1 ELSE 0 END) AS video_count,
+              SUM(CASE WHEN source_files.extension IN ({raw_placeholders})
+                THEN 1 ELSE 0 END) AS raw_count
             FROM batches
             LEFT JOIN batch_items ON batch_items.batch_id=batches.id
             LEFT JOIN source_files ON source_files.id=batch_items.source_file_id
@@ -1051,15 +1055,41 @@ class Repository:
             GROUP BY batches.id
             ORDER BY batches.created_at DESC
             """,
-            parameters,
+            (*raw_extensions, *parameters),
         )
+        state_rows = self.db.fetchall(
+            """
+            SELECT batch_id, state, COUNT(*) AS count
+            FROM batch_items
+            GROUP BY batch_id, state
+            """
+        )
+        states_by_batch: dict[str, dict[str, int]] = defaultdict(dict)
+        for state_row in state_rows:
+            states_by_batch[state_row["batch_id"]][state_row["state"]] = state_row["count"]
         for row in rows:
-            row["states"] = self.state_counts(row["id"])
-            row["series_blocked"] = self.series_blocked(row["id"])
-            raw_count = self._batch_raw_count(row["id"])
+            row["states"] = states_by_batch.get(row["id"], {})
+            row["series_blocked"] = (
+                self.series_blocked(row["id"])
+                if row["series_id"]
+                and not row["cancelled_at"]
+                and not row["confirmed_at"]
+                and not row["purged_at"]
+                else False
+            )
+            raw_count = int(row["raw_count"] or 0)
             row["raw_count"] = raw_count
             row["photo_count"] = max(0, int(row["photo_count"] or 0) - raw_count)
-            self._add_processing_estimate(row)
+            if row["cancelled_at"] or row["confirmed_at"] or row["purged_at"]:
+                row["processing_started_at"] = None
+                row["transfer_rate_bytes_per_second"] = None
+                row["eta_seconds"] = None
+                row["last_activity_at"] = row["created_at"]
+                row["stalled"] = False
+                row["stalled_for_seconds"] = None
+                row["stall_reason"] = None
+            else:
+                self._add_processing_estimate(row)
         return rows
 
     def list_backed_up_items(self, *, limit: int = 250, offset: int = 0) -> dict[str, Any]:
