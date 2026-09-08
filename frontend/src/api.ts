@@ -312,6 +312,8 @@ export const api = {
     request<Batch>(`/batches/${id}/pause`, { method: "POST" }),
   resumeBatch: (id: string) =>
     request<Batch>(`/batches/${id}/resume`, { method: "POST" }),
+  restoreCompletedBatch: (id: string) =>
+    request<Batch>(`/batches/${id}/restore-completed`, { method: "POST" }),
   cancelBatch: (id: string) =>
     request<Batch>(`/batches/${id}/cancel`, {
       method: "POST",

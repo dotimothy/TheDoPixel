@@ -1327,6 +1327,7 @@ class Repository:
             for item in batch["items"]
         )
         batch["video_count"] = sum(item["media_kind"] == "video" for item in batch["items"])
+        batch["restorable_completed_work"] = self._cancelled_completed_items(batch_id) is not None
         self._add_processing_estimate(batch)
         batch["performance"] = self.batch_performance(batch_id)
         return batch
@@ -1920,6 +1921,99 @@ class Repository:
         logger.info(
             "Batch cancelled",
             extra={"context": {"batch_id": batch_id, "item_count": len(items)}},
+        )
+        return self.get_batch(batch_id)
+
+    def _cancelled_completed_items(self, batch_id: str) -> list[dict[str, Any]] | None:
+        batch = self.db.fetchone(
+            "SELECT cancelled_at, confirmed_at, purged_at FROM batches WHERE id=?",
+            (batch_id,),
+        )
+        if not batch or not batch["cancelled_at"] or batch["confirmed_at"] or batch["purged_at"]:
+            return None
+        items = self.db.fetchall(
+            """
+            SELECT batch_items.id, batch_items.state,
+              (
+                SELECT state_events.from_state
+                FROM state_events
+                WHERE state_events.item_id=batch_items.id
+                  AND state_events.to_state='cancelled_on_pixel'
+                ORDER BY state_events.id DESC
+                LIMIT 1
+              ) AS state_before_cancel
+            FROM batch_items
+            WHERE batch_items.batch_id=?
+            """,
+            (batch_id,),
+        )
+        recoverable_states = {
+            ItemState.AWAITING_BACKUP_CONFIRMATION,
+            ItemState.STAGED_ON_PIXEL,
+        }
+        if not items or any(
+            item["state"] != ItemState.CANCELLED_ON_PIXEL
+            or item["state_before_cancel"] not in recoverable_states
+            for item in items
+        ):
+            return None
+        return items
+
+    def restore_cancelled_completed_batch(self, batch_id: str, user_id: int) -> dict[str, Any]:
+        items = self._cancelled_completed_items(batch_id)
+        if items is None:
+            raise DomainError(
+                "batch_restore_unsafe",
+                "Only a skipped batch whose files had all reached the Pixel can be restored",
+                status_code=409,
+            )
+        now = utcnow()
+        with self.db.transaction() as connection:
+            connection.execute(
+                """
+                UPDATE batches
+                SET cancelled_at=NULL, cancelled_by=NULL
+                WHERE id=? AND cancelled_at IS NOT NULL
+                """,
+                (batch_id,),
+            )
+            for item in items:
+                target = (
+                    ItemState.AWAITING_BACKUP_CONFIRMATION
+                    if item["state_before_cancel"] == ItemState.AWAITING_BACKUP_CONFIRMATION
+                    else ItemState.QUEUED
+                )
+                connection.execute(
+                    """
+                    UPDATE batch_items
+                    SET state=?, resume_state=NULL, error_code=NULL, error_detail=NULL,
+                        updated_at=?
+                    WHERE id=? AND state='cancelled_on_pixel'
+                    """,
+                    (target, now, item["id"]),
+                )
+                connection.execute(
+                    """
+                    INSERT INTO state_events(item_id, from_state, to_state, detail, created_at)
+                    VALUES (?, 'cancelled_on_pixel', ?, 'Completed work restored', ?)
+                    """,
+                    (item["id"], target, now),
+                )
+        self.db.audit(
+            "batch.restore_completed",
+            "batch",
+            batch_id,
+            user_id,
+            {
+                "items": len(items),
+                "ready": sum(
+                    item["state_before_cancel"] == ItemState.AWAITING_BACKUP_CONFIRMATION
+                    for item in items
+                ),
+                "requeued": sum(
+                    item["state_before_cancel"] == ItemState.STAGED_ON_PIXEL for item in items
+                ),
+            },
         )
         return self.get_batch(batch_id)
 

@@ -355,6 +355,7 @@ export interface Batch {
   stalled?: boolean;
   stalled_for_seconds?: number | null;
   stall_reason?: string | null;
+  restorable_completed_work?: boolean;
   performance?: BatchPerformance;
   file_count?: number;
   photo_count?: number;

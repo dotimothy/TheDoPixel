@@ -1169,28 +1169,29 @@ function Batches({ queue, refreshQueue, report, requestedBatchId, batchRequestHa
   const [filter, setFilter] = useState<BatchFilter>("all");
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
-    const [nextBatches, nextFailures] = await Promise.all([api.batches(), api.failedItems()]);
+    const nextBatches = await api.batches();
     setBatches(nextBatches);
-    setFailures(nextFailures);
-    if (selected) setSelected(await api.batch(selected.id));
     setLoading(false);
+    void api.failedItems().then(setFailures).catch(() => undefined);
+    if (selected) void api.batch(selected.id).then(setSelected).catch(() => undefined);
   }, [selected?.id]);
   useEffect(() => {
     let stopped = false;
-    let timer = 0;
-    async function poll() {
-      try {
-        await load();
-      } catch {
-        if (!stopped) setLoading(false);
-      } finally {
-        if (!stopped) timer = window.setTimeout(() => void poll(), 750);
-      }
-    }
-    void poll();
+    let refreshTimer = 0;
+    const refresh = () => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void load(), 150);
+    };
+    void load().catch(() => setLoading(false));
+    const stream = new EventSource("/api/v1/events");
+    stream.addEventListener("batch", refresh);
+    stream.addEventListener("queue", refresh);
+    const fallback = window.setInterval(() => { if (!stopped) void load(); }, 15_000);
     return () => {
       stopped = true;
-      window.clearTimeout(timer);
+      window.clearTimeout(refreshTimer);
+      window.clearInterval(fallback);
+      stream.close();
     };
   }, [load]);
   useEffect(() => {
@@ -1686,6 +1687,7 @@ function BatchDrawer({ batch, close, reload, removed, retriggered, report }: { b
   );
   const retriggerable = items.length > 0
     && items.every((item) => ["cancelled", "purged_from_pixel"].includes(item.state));
+  const restorableCompletedWork = Boolean(batch.restorable_completed_work);
   async function action(run: () => Promise<unknown>, success: string) {
     setBusy(true);
     try { await run(); await reload(); report(success); }
@@ -1752,6 +1754,7 @@ function BatchDrawer({ batch, close, reload, removed, retriggered, report }: { b
           {retryable && <button className="secondary" disabled={busy} onClick={() => void action(() => api.retryBatch(batch.id), "Retry queued")}><Icons.refresh /> Retry failed items</button>}
           {ready && <div className="safety-action"><div><strong>1. Confirm backup</strong><small>After Google Photos reports that backup is complete, confirm the entire batch here.</small></div><button className="primary amber" disabled={busy} onClick={() => void action(() => api.confirmBatch(batch.id), "Batch marked as backed up")}>I verified this batch</button></div>}
           {confirmed && !batch.purged_at && <div className="safety-action danger-zone"><div><strong>2. Purge Pixel copies</strong><small>Removes this batch’s Pixel copies after confirmation. Source files are never touched.</small></div><button className="danger" disabled={busy} onClick={() => { if (window.confirm(`Purge Pixel copies for “${batch.name}”?`)) void action(() => api.purgeBatch(batch.id), "Pixel copies purged"); }}>Purge Pixel copies</button></div>}
+          {restorableCompletedWork && <div className="safety-action"><div><strong>Restore completed work</strong><small>Returns files that had finished to verification and safely rechecks any interrupted media scan. No source or Pixel files are deleted.</small></div><button className="primary" disabled={busy} onClick={() => void action(() => api.restoreCompletedBatch(batch.id), "Completed work restored; interrupted checks queued")}>Restore completed work</button></div>}
           {cancelledNeedsCleanup && !cancellationSettling && !batch.purged_at && <div className="safety-action danger-zone"><div><strong>Remove cancelled Pixel copies</strong><small>This removes only copies associated with the cancelled batch.</small></div><button className="danger" disabled={busy} onClick={() => { if (window.confirm(`Remove cancelled Pixel copies for “${batch.name}”?`)) void action(() => api.purgeBatch(batch.id), "Cancelled Pixel copies removed"); }}>Clean up Pixel copies</button></div>}
           {retriggerable && <div className="safety-action retrigger-action"><div><strong>Run this batch again</strong><small>Creates a new queued batch from the same source-file records and preserves this batch’s history.</small></div><button className="secondary" disabled={busy} onClick={() => void retriggerBatch()}><Icons.refresh /> Run again</button></div>}
           {deletable && <div className="safety-action danger-zone"><div><strong>{batch.cancelled_at ? "Delete cancelled batch entry" : "Delete batch records"}</strong><small>This deletes the local batch entry and its history.{cancelledCopiesMayRemain ? " Copies already transferred to the Pixel are not removed." : ""}</small></div><button className="danger" disabled={busy} onClick={() => void removeBatch()}>{batch.cancelled_at ? "Delete cancelled batch" : "Delete batch"}</button></div>}

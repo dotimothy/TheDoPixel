@@ -54,6 +54,30 @@ def test_health_is_public_but_dashboard_is_private(tmp_path: Path) -> None:
         assert client.get("/api/v1/dashboard").status_code == 401
 
 
+def test_startup_requeues_media_scan_interrupted_by_restart(tmp_path: Path) -> None:
+    app = configured_app(tmp_path)
+    source_folder = tmp_path / "restart-scan"
+    source_folder.mkdir()
+    source = source_folder / "photo.jpg"
+    source.write_bytes(b"staged")
+    root = app.state.repository.add_root("Restart scan", str(source_folder))
+    record = app.state.repository.register_file(source, root["id"])
+    batch = app.state.repository.create_batch("Interrupted scan", [record["id"]], 1)
+    item_id = batch["items"][0]["id"]
+    app.state.repository.transition(item_id, ItemState.TRANSFERRING)
+    app.state.repository.transition(item_id, ItemState.STAGED_ON_PIXEL)
+
+    with TestClient(app):
+        recovered = app.state.repository.get_batch(batch["id"])
+
+    assert recovered["states"] == {"queued": 1}
+    events = app.state.db.fetchall(
+        "SELECT to_state FROM state_events WHERE item_id=? ORDER BY id DESC LIMIT 2",
+        (item_id,),
+    )
+    assert [event["to_state"] for event in events] == ["queued", "media_scan_failed"]
+
+
 def test_authenticated_user_can_request_graceful_server_shutdown(tmp_path: Path) -> None:
     app = configured_app(tmp_path)
     callbacks: list[str] = []
@@ -1115,6 +1139,42 @@ def test_batch_can_be_manually_confirmed_without_picker(tmp_path: Path) -> None:
         assert backed_up.json()["items"][0]["state"] == "confirmed_backed_up"
 
         assert all("picker" not in path for path in app.openapi()["paths"])
+
+
+def test_skipped_completed_work_can_be_restored_safely(tmp_path: Path) -> None:
+    app = configured_app(tmp_path)
+    repository = app.state.repository
+    source_folder = tmp_path / "restore-completed"
+    source_folder.mkdir()
+    root = repository.add_root("Restore", str(source_folder))
+    records = []
+    for index in range(2):
+        source = source_folder / f"photo-{index}.jpg"
+        source.write_bytes(f"restore-{index}".encode())
+        records.append(repository.register_file(source, root["id"]))
+    batch = repository.create_batch("Restore completed", [item["id"] for item in records], 1)
+    first, second = batch["items"]
+    for item in (first, second):
+        repository.transition(item["id"], ItemState.TRANSFERRING)
+        repository.transition(item["id"], ItemState.STAGED_ON_PIXEL)
+    repository.transition(first["id"], ItemState.AWAITING_BACKUP_CONFIRMATION)
+    cancelled = repository.cancel_batch(batch["id"], 1)
+    assert cancelled["restorable_completed_work"] is True
+
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "a secure local password"},
+        )
+        response = client.post(
+            f"/api/v1/batches/{batch['id']}/restore-completed",
+            headers={"X-CSRF-Token": login.json()["csrf_token"]},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["cancelled_at"] is None
+    assert response.json()["states"] == {"awaiting_backup_confirmation": 1, "queued": 1}
+    assert response.json()["restorable_completed_work"] is False
 
 
 def test_all_completed_batches_can_be_confirmed_in_one_request(tmp_path: Path) -> None:

@@ -270,19 +270,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Timeout as exc:
             raise RuntimeError(f"Another TheDoPixel process is using {settings.data_dir}") from exc
         app.state.instance_lock = instance_lock
-        interrupted = db.fetchall("SELECT id FROM batch_items WHERE state='transferring'")
+        interrupted = db.fetchall(
+            "SELECT id, state FROM batch_items WHERE state IN ('transferring', 'staged_on_pixel')"
+        )
         if interrupted:
             logger.warning(
-                "Recovering interrupted transfers after restart",
+                "Recovering interrupted transfers and media scans after restart",
                 extra={"context": {"interrupted_items": len(interrupted)}},
             )
         for item in interrupted:
-            repository.transition(
-                item["id"],
-                "transfer_failed",
-                detail="Service restarted during transfer; remote copy will be reconciled",
-                error_code="service_restarted",
-            )
+            if item["state"] == ItemState.STAGED_ON_PIXEL:
+                repository.transition(
+                    item["id"],
+                    ItemState.MEDIA_SCAN_FAILED,
+                    detail="Service restarted during media scan; Pixel copy will be reconciled",
+                    error_code="service_restarted",
+                )
+            else:
+                repository.transition(
+                    item["id"],
+                    ItemState.TRANSFER_FAILED,
+                    detail="Service restarted during transfer; remote copy will be reconciled",
+                    error_code="service_restarted",
+                )
             repository.transition(item["id"], "queued", detail="Automatic restart recovery")
         if settings.worker_enabled:
             await worker.start()
@@ -2159,6 +2169,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         batch = repository.resume_batch(batch_id, user["user_id"])
         worker.wake()
         await events.publish("batch", {"action": "resumed", "batch_id": batch_id})
+        return enrich_batch(batch)
+
+    @router.post("/batches/{batch_id}/restore-completed")
+    async def restore_completed_batch(batch_id: str, user: MutatingUser) -> dict:
+        batch = repository.restore_cancelled_completed_batch(batch_id, user["user_id"])
+        worker.wake()
+        await events.publish("batch", {"action": "restored", "batch_id": batch_id})
         return enrich_batch(batch)
 
     @router.post("/batches/{batch_id}/cancel")
