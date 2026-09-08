@@ -1978,6 +1978,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await events.publish("batch", {"action": "retry_all", **result})
         return result
 
+    @router.post("/batches/confirm-ready")
+    async def confirm_all_ready_batches(
+        _payload: ConfirmationRequest,
+        user: MutatingUser,
+    ) -> dict:
+        result = repository.confirm_ready_batches(user["user_id"])
+        await events.publish("batch", {"action": "confirmed_all", **result})
+        return result
+
     @router.get("/backups/items")
     async def backed_up_items(
         _user: Authenticated,

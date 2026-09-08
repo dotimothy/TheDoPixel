@@ -1350,34 +1350,17 @@ function Batches({ queue, refreshQueue, report, requestedBatchId, batchRequestHa
     if (!readyToVerify.length) return;
     const count = readyToVerify.length;
     if (!window.confirm(
-      `Mark all ${count} ready ${count === 1 ? "batch" : "batches"} as verified? `
+      `Mark all ${count} completed ${count === 1 ? "batch" : "batches"} as verified? `
       + "Only continue after confirming every batch is backed up in Google Photos. "
       + "This does not purge any Pixel copies."
     )) return;
     setBulkBusy(true);
     try {
-      const results = await Promise.allSettled(
-        readyToVerify.map((batch) => api.confirmBatch(batch.id))
-      );
-      const failures = results.filter(
-        (result): result is PromiseRejectedResult => result.status === "rejected"
-      );
+      const result = await api.confirmReadyBatches();
       await Promise.all([load(), refreshQueue()]);
-      const succeeded = results.length - failures.length;
-      if (failures.length) {
-        const firstError = failures[0].reason instanceof Error
-          ? failures[0].reason.message
-          : "Unknown error";
-        report(
-          `${succeeded} of ${results.length} ready batches verified. `
-          + `${failures.length} failed: ${firstError}`,
-          "bad"
-        );
-      } else {
-        report(`${succeeded} ready ${succeeded === 1 ? "batch" : "batches"} marked as backed up`);
-      }
+      report(`${result.verified} completed ${result.verified === 1 ? "batch" : "batches"} marked as backed up`);
     } catch (error) {
-      report(error instanceof Error ? error.message : "Could not verify ready batches", "bad");
+      report(error instanceof Error ? error.message : "Could not verify completed batches", "bad");
     } finally {
       setBulkBusy(false);
     }
@@ -1424,7 +1407,7 @@ function Batches({ queue, refreshQueue, report, requestedBatchId, batchRequestHa
   }
   return (
     <>
-      <div className="page-heading"><div><div className="page-kicker">RELAY WORK</div><h1>Batches <span>& queue</span></h1><p>Every file keeps a complete, restart-safe state history.</p></div><div className="page-heading-actions"><button type="button" className="primary amber" disabled={bulkBusy || !readyToVerify.length} onClick={() => void verifyAllReady()}>{bulkBusy ? "Updating…" : `Verify all ready (${readyToVerify.length})`}</button><button type="button" className="danger" disabled={bulkBusy || !allBatchesVerified || !verifiedToPurge.length} title={!allBatchesVerified ? "Every non-cancelled batch must be verified first" : undefined} onClick={() => void purgeAllVerified()}>{bulkBusy ? "Updating…" : `Purge all verified (${verifiedToPurge.length})`}</button><button type="button" className="secondary" disabled={bulkBusy} onClick={() => void load()}><Icons.refresh /> Refresh</button></div></div>
+      <div className="page-heading"><div><div className="page-kicker">RELAY WORK</div><h1>Batches <span>& queue</span></h1><p>Every file keeps a complete, restart-safe state history.</p></div><div className="page-heading-actions"><button type="button" className="primary amber" disabled={bulkBusy || !readyToVerify.length} onClick={() => void verifyAllReady()}>{bulkBusy ? "Updating…" : `Verify completed (${readyToVerify.length})`}</button><button type="button" className="danger" disabled={bulkBusy || !allBatchesVerified || !verifiedToPurge.length} title={!allBatchesVerified ? "Every non-cancelled batch must be verified first" : undefined} onClick={() => void purgeAllVerified()}>{bulkBusy ? "Updating…" : `Purge all verified (${verifiedToPurge.length})`}</button><button type="button" className="secondary" disabled={bulkBusy} onClick={() => void load()}><Icons.refresh /> Refresh</button></div></div>
       <QueueControl queue={queue} activeBatch={activeBatch} refresh={refreshQueue} report={report} />
       <section className={`panel failed-items-panel ${failures.total ? "has-failures" : ""}`}>
         <div className="panel-head">

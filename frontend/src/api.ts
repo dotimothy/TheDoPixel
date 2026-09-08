@@ -324,6 +324,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ acknowledgement: "I verified this batch in Google Photos" })
     }),
+  confirmReadyBatches: () =>
+    request<{ verified: number; batch_ids: string[] }>("/batches/confirm-ready", {
+      method: "POST",
+      body: JSON.stringify({ acknowledgement: "I verified this batch in Google Photos" })
+    }),
   purgeBatch: (id: string) =>
     request<Batch>(`/batches/${id}/purge`, {
       method: "POST"

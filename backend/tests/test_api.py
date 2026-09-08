@@ -1117,6 +1117,47 @@ def test_batch_can_be_manually_confirmed_without_picker(tmp_path: Path) -> None:
         assert all("picker" not in path for path in app.openapi()["paths"])
 
 
+def test_all_completed_batches_can_be_confirmed_in_one_request(tmp_path: Path) -> None:
+    app = configured_app(tmp_path)
+    repository = app.state.repository
+    source_folder = tmp_path / "completed-batches"
+    source_folder.mkdir()
+    root = repository.add_root("Completed batches", str(source_folder))
+    completed = []
+    for index in range(2):
+        source = source_folder / f"complete-{index}.jpg"
+        source.write_bytes(f"complete-{index}".encode())
+        record = repository.register_file(source, root["id"])
+        batch = repository.create_batch(f"Completed {index}", [record["id"]], 1)
+        item_id = batch["items"][0]["id"]
+        repository.transition(item_id, ItemState.TRANSFERRING)
+        repository.transition(item_id, ItemState.STAGED_ON_PIXEL)
+        repository.transition(item_id, ItemState.AWAITING_BACKUP_CONFIRMATION)
+        completed.append(batch)
+
+    pending_source = source_folder / "pending.jpg"
+    pending_source.write_bytes(b"pending")
+    pending_record = repository.register_file(pending_source, root["id"])
+    pending = repository.create_batch("Still pending", [pending_record["id"]], 1)
+
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "a secure local password"},
+        )
+        response = client.post(
+            "/api/v1/batches/confirm-ready",
+            headers={"X-CSRF-Token": login.json()["csrf_token"]},
+            json={"acknowledgement": "I verified this batch in Google Photos"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["verified"] == 2
+    assert set(response.json()["batch_ids"]) == {batch["id"] for batch in completed}
+    assert all(repository.get_batch(batch["id"])["confirmed_at"] for batch in completed)
+    assert repository.get_batch(pending["id"])["confirmed_at"] is None
+
+
 def test_clean_slate_removes_only_relay_tree_and_reconciles_batches(
     tmp_path: Path,
     monkeypatch,

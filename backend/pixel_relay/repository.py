@@ -2285,6 +2285,27 @@ class Repository:
             )
         return self.get_batch(batch_id)
 
+    def confirm_ready_batches(self, user_id: int) -> dict[str, Any]:
+        ready = self.db.fetchall(
+            """
+            SELECT batches.id
+            FROM batches
+            JOIN batch_items ON batch_items.batch_id=batches.id
+            WHERE batches.cancelled_at IS NULL
+              AND batches.confirmed_at IS NULL
+              AND batches.purged_at IS NULL
+            GROUP BY batches.id
+            HAVING COUNT(batch_items.id) > 0
+              AND SUM(CASE WHEN batch_items.state != ? THEN 1 ELSE 0 END) = 0
+            ORDER BY batches.created_at, batches.id
+            """,
+            (ItemState.AWAITING_BACKUP_CONFIRMATION,),
+        )
+        batch_ids = [row["id"] for row in ready]
+        for batch_id in batch_ids:
+            self.confirm_batch(batch_id, user_id)
+        return {"verified": len(batch_ids), "batch_ids": batch_ids}
+
     def setting(self, key: str, default: str = "") -> str:
         row = self.db.fetchone("SELECT value FROM app_settings WHERE key=?", (key,))
         return row["value"] if row else default
