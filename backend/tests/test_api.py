@@ -167,7 +167,7 @@ def test_app_update_rebuilds_and_restarts_when_git_is_already_current(
 
 def test_windows_command_launchers_use_cmd_exe(tmp_path: Path, monkeypatch) -> None:
     captured: list[list[str]] = []
-    monkeypatch.setattr(api_module.os, "name", "nt")
+    monkeypatch.setattr(api_module.sys, "platform", "win32")
     monkeypatch.setenv("COMSPEC", r"C:\Windows\System32\cmd.exe")
 
     def run(command, **_kwargs):
@@ -217,6 +217,76 @@ def test_windows_finds_git_bundled_with_github_desktop(
     monkeypatch.setenv("PROGRAMFILES", str(tmp_path / "Program Files"))
 
     assert api_module.maintenance_tool("git") == str(bundled_git)
+
+
+def test_windows_app_update_uses_bundled_tools_rebuilds_and_restarts(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    app = configured_app(tmp_path)
+    checkout = tmp_path / "TheDoPixel"
+    (checkout / ".git").mkdir(parents=True)
+    (checkout / "frontend").mkdir()
+    local_app_data = tmp_path / "LocalAppData"
+    user_profile = tmp_path / "User"
+    program_files = tmp_path / "Program Files"
+    git = (
+        local_app_data
+        / "GitHubDesktop"
+        / "app-3.5.2"
+        / "resources"
+        / "app"
+        / "git"
+        / "cmd"
+        / "git.exe"
+    )
+    uv = user_profile / ".local" / "bin" / "uv.exe"
+    npm = program_files / "nodejs" / "npm.cmd"
+    for tool in (git, uv, npm):
+        tool.parent.mkdir(parents=True, exist_ok=True)
+        tool.touch()
+
+    callbacks: list[str] = []
+    commands: list[list[str]] = []
+    app.state.restart_callback = lambda: callbacks.append("restart")
+    monkeypatch.setattr(api_module, "application_root", lambda: checkout)
+    monkeypatch.setattr(api_module.sys, "platform", "win32")
+    monkeypatch.setattr(api_module.shutil, "which", lambda _name: None)
+    monkeypatch.setenv("LOCALAPPDATA", str(local_app_data))
+    monkeypatch.setenv("USERPROFILE", str(user_profile))
+    monkeypatch.setenv("PROGRAMFILES", str(program_files))
+    monkeypatch.setenv("COMSPEC", r"C:\Windows\System32\cmd.exe")
+
+    def run(command, **_kwargs):
+        commands.append(command)
+        stdout = "Updating f36cacf..c9c2808\n" if command[1:3] == ["pull", "--ff-only"] else ""
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(api_module.subprocess, "run", run)
+
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "a secure local password"},
+        )
+        response = client.post(
+            "/api/v1/app/update",
+            headers={"X-CSRF-Token": login.json()["csrf_token"]},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["updated"] is True
+    assert response.json()["restarting"] is True
+    assert callbacks == ["restart"]
+    assert commands[:3] == [
+        [str(git), "status", "--porcelain"],
+        [str(git), "pull", "--ff-only"],
+        [str(uv), "sync", "--project", str(checkout)],
+    ]
+    assert len(commands) == 5
+    for command in commands[3:]:
+        assert command[:4] == [r"C:\Windows\System32\cmd.exe", "/d", "/s", "/c"]
+        assert f'"{npm}"' in command[4]
 
 
 def test_dashboard_separates_active_batch_from_five_other_in_progress_batches(

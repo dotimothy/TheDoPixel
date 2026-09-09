@@ -2799,7 +2799,7 @@ function StorageSelector({
       ].filter(Boolean).join("\n")} />}
       <small>Target: <code>{primarySwitchOperation.target_uuid || "phone internal storage"}</code> · Destination remains <code>/sdcard/…</code>{switchingPrimary ? " · Keep the Pixel and selected drive connected." : ""}</small>
       {!switchingPrimary && <div className="adoption-actions">
-        {primarySwitchOperation.status === "failed" && <button type="button" disabled={retryingPrimarySwitch} onClick={() => void retryPrimarySwitch()}><Icons.refresh className={retryingPrimarySwitch ? "spin" : ""} /> {retryingPrimarySwitch ? "Retrying…" : "Retry migration"}</button>}
+        {primarySwitchOperation.status === "failed" && <button type="button" className="primary small" disabled={retryingPrimarySwitch} onClick={() => void retryPrimarySwitch()}><Icons.refresh className={retryingPrimarySwitch ? "spin" : ""} /> {retryingPrimarySwitch ? "Retrying…" : "Retry migration"}</button>}
         <button type="button" className="secondary small" disabled={retryingPrimarySwitch} onClick={() => void dismissPrimarySwitch()}>Dismiss status</button>
       </div>}
     </div>}

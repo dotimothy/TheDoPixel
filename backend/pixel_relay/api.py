@@ -156,7 +156,7 @@ def maintenance_tool(name: str) -> str | None:
 def run_local_command(command: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
     """Run a fixed local maintenance command, including Windows batch launchers."""
     effective_command = command
-    if os.name == "nt" and command[0].lower().endswith((".bat", ".cmd")):
+    if sys.platform == "win32" and command[0].lower().endswith((".bat", ".cmd")):
         command_processor = os.environ.get("COMSPEC", "cmd.exe")
         # cmd.exe /S /C strips the first and last quote from its command
         # argument. Keep an outer pair around list2cmdline's quoted launcher

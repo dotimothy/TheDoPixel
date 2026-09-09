@@ -107,7 +107,7 @@ main { min-width: 0; }
 .primary.amber { background: var(--amber); border-color: var(--amber); color: #211600; }
 .secondary { background: #111d25; border: 1px solid #2b3b46; color: #b9c5cb; }
 .secondary:hover { border-color: #47606e; color: white; }
-.secondary.small { min-height: 31px; padding: 0 10px; font-size: 9px; }
+.primary.small, .secondary.small, .danger.small { min-height: 31px; padding: 0 10px; font-size: 9px; }
 .danger { background: #3d1e20; border: 1px solid #7b3538; color: #ff9b98; }
 .danger:hover:not(:disabled) { background: #542326; }
 .primary svg, .secondary svg { width: 15px; height: 15px; }
@@ -279,7 +279,6 @@ main { min-width: 0; }
 .batch-select-all:has(input:disabled) { cursor: not-allowed; opacity: .5; }
 .batch-select-all input, .batch-select input { width: 15px; height: 15px; margin: 0; accent-color: var(--cyan); cursor: pointer; }
 .batch-bulk-actions { display: flex; justify-content: flex-end; gap: 6px; width: 100%; overflow-x: auto; }
-.danger.small { min-height: 31px; padding: 0 10px; font-size: 9px; }
 .batch-selectable-head { grid-template-columns: 28px minmax(250px, 1.4fr) minmax(150px, 1fr) 100px 110px 20px; padding-left: 17px; }
 .selectable-batch-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: stretch; border-top: 1px solid #1d2b34; transition: background .15s ease; }
 .selectable-batch-row:first-child { border-top: 0; }
@@ -809,7 +808,7 @@ main { min-width: 0; }
   .page-heading { align-items: flex-start; flex-direction: column; }
   .page-heading-actions { width: 100%; flex-wrap: wrap; }
   .primary, .secondary, .danger { min-height: 44px; }
-  .secondary.small { min-height: 40px; }
+  .primary.small, .secondary.small, .danger.small { min-height: 40px; }
   .device-banner { grid-template-columns: 75px 1fr; padding: 18px; }
   .device-illustration { width: 70px; height: 100px; }.device-illustration svg { width: 47px; height: 87px; }
   .device-stats { grid-template-columns: 1fr 1fr; }
