@@ -72,8 +72,9 @@ def primary_storage_move_guidance(output: str) -> str:
         ),
         -9: "Android policy does not allow this move to internal storage.",
         -10: (
-            "Android refused because the user profile is locked. Unlock the Pixel with "
-            "its PIN, pattern, or password and wait for the home screen before retrying."
+            "Android refused because an Android user or profile is locked. Unlock the "
+            "Pixel with its PIN, pattern, or password, unlock any Work Profile or "
+            "Private Space, and wait for the home screen before retrying."
         ),
     }
     return guidance.get(
@@ -1067,7 +1068,7 @@ class SafeAdb:
             )
             raise AdbError(
                 f"Android could not move /sdcard to {target_label}. "
-                f"{primary_storage_move_guidance(detail)} ADB detail: {detail}",
+                f"{primary_storage_move_guidance(detail)}",
                 output=detail,
             )
 

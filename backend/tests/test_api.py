@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 from pixel_relay import api as api_module
 from pixel_relay import config as config_module
+from pixel_relay.adb import AdbError
 from pixel_relay.api import create_app
 from pixel_relay.auth import AuthService
 from pixel_relay.config import Settings
@@ -938,6 +939,40 @@ def test_primary_storage_switch_waits_for_active_file_then_runs(
     assert operation["status"] == "completed"
     assert calls == [""]
     assert app.state.repository.expected_uuid() == ""
+    assert app.state.worker.maintenance_reason is None
+
+
+def test_primary_storage_switch_exposes_adb_failure_as_copyable_diagnostic(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    app = configured_app(tmp_path)
+
+    async def switch_primary_storage(_target: str, **_options) -> dict:
+        raise AdbError("Unlock every Android profile and retry", output="Failure [-10]")
+
+    monkeypatch.setattr(app.state.adb, "switch_primary_storage", switch_primary_storage)
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "a secure local password"},
+        )
+        headers = {"X-CSRF-Token": login.json()["csrf_token"]}
+        accepted = client.post(
+            "/api/v1/device/storage/primary-switch",
+            headers=headers,
+            json={"target_uuid": ""},
+        )
+        assert accepted.status_code == 202
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            operation = client.get("/api/v1/device/storage/primary-switch").json()["operation"]
+            if operation["status"] == "failed":
+                break
+            time.sleep(0.01)
+
+    assert operation["error"] == "Unlock every Android profile and retry"
+    assert operation["diagnostic"] == "Failure [-10]"
     assert app.state.worker.maintenance_reason is None
 
 

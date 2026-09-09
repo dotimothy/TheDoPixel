@@ -265,8 +265,10 @@ def test_adb_output_preview_is_bounded() -> None:
 def test_primary_storage_failure_explains_locked_android_user() -> None:
     guidance = primary_storage_move_guidance("Failure [-10]")
 
-    assert "user profile is locked" in guidance
+    assert "user or profile is locked" in guidance
     assert "PIN, pattern, or password" in guidance
+    assert "Work Profile" in guidance
+    assert "Private Space" in guidance
     assert "home screen" in guidance
 
 
@@ -804,6 +806,33 @@ async def test_primary_storage_switch_moves_sdcard_back_to_internal(
         "verifying",
         "complete",
     ]
+
+
+async def test_primary_storage_switch_keeps_locked_profile_detail_separate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adb = SafeAdb(Settings(data_dir=tmp_path, connection_mode="usb"))
+
+    async def storage_devices() -> dict:
+        return {
+            "disks": [],
+            "volumes": [],
+            "current_primary_uuid": "adopted-uuid",
+        }
+
+    async def shell(*_args: str, **_kwargs) -> CommandResult:
+        return CommandResult(0, "Failure [-10]", "")
+
+    monkeypatch.setattr(adb, "storage_devices", storage_devices)
+    monkeypatch.setattr(adb, "shell", shell)
+
+    with pytest.raises(AdbError) as raised:
+        await adb.switch_primary_storage("")
+
+    assert "Work Profile or Private Space" in str(raised.value)
+    assert "ADB detail" not in str(raised.value)
+    assert raised.value.output == "Failure [-10]"
 
 
 async def test_primary_storage_switch_rejects_unmounted_or_nonphysical_uuid(

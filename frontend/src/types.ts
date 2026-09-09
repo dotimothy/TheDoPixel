@@ -218,6 +218,7 @@ export interface StoragePrimarySwitchOperation {
     device: Device;
   } | null;
   error?: string | null;
+  diagnostic?: string | null;
 }
 
 export interface ServerDirectoryListing {

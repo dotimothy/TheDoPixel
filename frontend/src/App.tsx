@@ -2435,6 +2435,7 @@ function StorageSelector({
   const [submittingAdoption, setSubmittingAdoption] = useState(false);
   const [adoptionOperation, setAdoptionOperation] = useState<StorageAdoptionOperation | null>(null);
   const [primarySwitchOperation, setPrimarySwitchOperation] = useState<StoragePrimarySwitchOperation | null>(null);
+  const [retryingPrimarySwitch, setRetryingPrimarySwitch] = useState(false);
   const [unmountingDiskId, setUnmountingDiskId] = useState<string | null>(null);
   const [adoptionElapsed, setAdoptionElapsed] = useState(0);
   const [primarySwitchElapsed, setPrimarySwitchElapsed] = useState(0);
@@ -2675,6 +2676,27 @@ function StorageSelector({
     }
   }
 
+  async function retryPrimarySwitch() {
+    if (!primarySwitchOperation || primarySwitchOperation.status !== "failed") return;
+    const targetUuid = primarySwitchOperation.target_uuid;
+    setRetryingPrimarySwitch(true);
+    try {
+      await api.dismissStoragePrimarySwitch();
+      const operation = await api.switchPrimaryStorage(targetUuid);
+      handledPrimarySwitch.current = null;
+      setPrimarySwitchOperation(operation);
+      setPrimarySwitchElapsed(0);
+      report("Retrying Android storage migration. Keep every Android profile unlocked.");
+    } catch (error) {
+      report(
+        error instanceof Error ? error.message : "Could not retry storage migration",
+        "bad"
+      );
+    } finally {
+      setRetryingPrimarySwitch(false);
+    }
+  }
+
   async function unmount(medium: StorageMedium) {
     const mountedVolumes = medium.volumes.filter(
       (volume) => ["public", "private", "stub"].includes(volume.volume_type || "")
@@ -2771,9 +2793,15 @@ function StorageSelector({
       </div>
       <div className="adoption-progress-track"><i style={{ width: `${Math.max(1, Math.min(100, primarySwitchProgress.percent))}%` }} /></div>
       <p>{primarySwitchProgress.message}</p>
-      {primarySwitchProgress.failed && <CopyButton text={primarySwitchOperation.error || primarySwitchProgress.message} />}
+      {primarySwitchProgress.failed && <CopyButton text={[
+        primarySwitchOperation.error || primarySwitchProgress.message,
+        primarySwitchOperation.diagnostic && `ADB detail: ${primarySwitchOperation.diagnostic}`
+      ].filter(Boolean).join("\n")} />}
       <small>Target: <code>{primarySwitchOperation.target_uuid || "phone internal storage"}</code> · Destination remains <code>/sdcard/…</code>{switchingPrimary ? " · Keep the Pixel and selected drive connected." : ""}</small>
-      {!switchingPrimary && <div className="adoption-actions"><button type="button" className="secondary small" onClick={() => void dismissPrimarySwitch()}>Dismiss status</button></div>}
+      {!switchingPrimary && <div className="adoption-actions">
+        {primarySwitchOperation.status === "failed" && <button type="button" disabled={retryingPrimarySwitch} onClick={() => void retryPrimarySwitch()}><Icons.refresh className={retryingPrimarySwitch ? "spin" : ""} /> {retryingPrimarySwitch ? "Retrying…" : "Retry migration"}</button>}
+        <button type="button" className="secondary small" disabled={retryingPrimarySwitch} onClick={() => void dismissPrimarySwitch()}>Dismiss status</button>
+      </div>}
     </div>}
     {choices && <>
       <div className="storage-quick-choice">

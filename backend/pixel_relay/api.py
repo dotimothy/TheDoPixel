@@ -854,6 +854,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
             "result": None,
             "error": None,
+            "diagnostic": None,
         }
 
         async def report_primary_progress(progress: dict) -> None:
@@ -956,15 +957,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raise
             except Exception as exc:
                 message = str(exc) or "Android primary-storage migration failed"
+                diagnostic = (
+                    exc.output.strip()
+                    if isinstance(exc, AdbError) and exc.output
+                    else None
+                )
                 operation["status"] = "failed"
                 operation["finished_at"] = datetime.now(UTC).isoformat()
                 operation["error"] = message
+                operation["diagnostic"] = diagnostic
                 db.audit(
                     "device.storage_primary_switch_failed",
                     "android_storage_uuid",
                     target_uuid or "internal",
                     user["user_id"],
-                    {"error": message},
+                    {"error": message, "diagnostic": diagnostic},
                 )
                 logger.exception("Background Android primary-storage migration failed")
                 await report_primary_progress(
