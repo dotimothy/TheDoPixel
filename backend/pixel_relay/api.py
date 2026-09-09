@@ -825,10 +825,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 ),
                 status_code=409,
             )
-        if worker.active_batch_id or worker.maintenance_reason:
+        if worker.maintenance_reason:
             raise DomainError(
                 "device_busy",
-                "Wait for active Pixel work to finish before changing primary storage",
+                "Another Pixel maintenance operation is already running",
                 status_code=409,
             )
 
@@ -880,6 +880,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         async def run_primary_switch() -> None:
             try:
+                if worker.active_batch_id:
+                    await report_primary_progress(
+                        {
+                            "stage": "waiting_for_transfer",
+                            "message": "Waiting for the current file to finish safely",
+                            "step": 1,
+                            "step_count": 4,
+                            "percent": 2,
+                        }
+                    )
+                while worker.active_batch_id:
+                    await asyncio.sleep(0.25)
                 result = await adb.switch_primary_storage(
                     target_uuid,
                     progress=report_primary_progress,

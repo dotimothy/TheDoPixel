@@ -889,6 +889,58 @@ def test_primary_storage_switch_updates_pixel_and_uuid_lock_together(
     assert app.state.worker.maintenance_reason is None
 
 
+def test_primary_storage_switch_waits_for_active_file_then_runs(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    app = configured_app(tmp_path)
+    calls: list[str] = []
+    app.state.worker.active_batch_id = "active-batch"
+
+    async def switch_primary_storage(target: str, **options) -> dict:
+        calls.append(target)
+        return {
+            "previous_uuid": "adopted-uuid",
+            "target_uuid": target,
+            "changed": True,
+            "storage": {"disks": [], "volumes": [], "current_primary_uuid": target},
+        }
+
+    async def refresh_device() -> dict:
+        return {"state": "device", "primary_storage_uuid": "", "storage_ready": True}
+
+    monkeypatch.setattr(app.state.adb, "switch_primary_storage", switch_primary_storage)
+    monkeypatch.setattr(app.state.worker, "refresh_device", refresh_device)
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "a secure local password"},
+        )
+        headers = {"X-CSRF-Token": login.json()["csrf_token"]}
+        accepted = client.post(
+            "/api/v1/device/storage/primary-switch",
+            headers=headers,
+            json={"target_uuid": ""},
+        )
+        assert accepted.status_code == 202
+        assert accepted.json()["status"] == "running"
+        assert app.state.worker.maintenance_reason == "storage_primary_switch"
+        assert calls == []
+
+        app.state.worker.active_batch_id = None
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            operation = client.get("/api/v1/device/storage/primary-switch").json()["operation"]
+            if operation["status"] == "completed":
+                break
+            time.sleep(0.01)
+
+    assert operation["status"] == "completed"
+    assert calls == [""]
+    assert app.state.repository.expected_uuid() == ""
+    assert app.state.worker.maintenance_reason is None
+
+
 def test_storage_unmount_records_the_exact_disk_and_volumes(
     tmp_path: Path,
     monkeypatch,
