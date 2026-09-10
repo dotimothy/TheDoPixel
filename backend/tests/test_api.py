@@ -1718,3 +1718,43 @@ def test_authenticated_user_can_restart_fixed_adb_server(
     assert response.status_code == 200
     assert response.json()["restarted"] is True
     assert response.json()["device"]["state"] == "device"
+
+
+def test_authenticated_user_can_run_audited_advanced_adb_shell(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    app = configured_app(tmp_path)
+    calls: list[tuple[str, int]] = []
+
+    async def advanced_shell(command: str, *, timeout: int):
+        calls.append((command, timeout))
+        return SimpleNamespace(returncode=0, stdout="Pixel", stderr="")
+
+    monkeypatch.setattr(app.state.adb, "advanced_shell", advanced_shell)
+
+    with TestClient(app) as client:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"username": "admin", "password": "a secure local password"},
+        )
+        response = client.post(
+            "/api/v1/device/adb-shell",
+            headers={"X-CSRF-Token": login.json()["csrf_token"]},
+            json={"command": "getprop ro.product.model", "timeout_seconds": 12},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "command": "getprop ro.product.model",
+        "return_code": 0,
+        "stdout": "Pixel",
+        "stderr": "",
+        "output_truncated": False,
+    }
+    assert calls == [("getprop ro.product.model", 12)]
+    audit = app.state.db.fetchone(
+        "SELECT action, detail_json FROM audit_log WHERE action='device.adb_shell'"
+    )
+    assert audit["action"] == "device.adb_shell"
+    assert json.loads(audit["detail_json"])["command"] == "getprop ro.product.model"

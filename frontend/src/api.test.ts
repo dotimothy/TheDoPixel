@@ -90,6 +90,30 @@ describe("storage adoption API", () => {
     expect(result.megabytes_per_second).toBe(16);
   });
 
+  it("runs an advanced Android shell command with a bounded timeout", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      command: "getprop ro.product.model",
+      return_code: 0,
+      stdout: "Pixel",
+      stderr: "",
+      output_truncated: false
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await api.runAdbShell("getprop ro.product.model", 12);
+
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/v1/device/adb-shell");
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(request.method).toBe("POST");
+    expect(JSON.parse(String(request.body))).toEqual({
+      command: "getprop ro.product.model",
+      timeout_seconds: 12
+    });
+  });
+
   it("requires the fixed acknowledgement for a Pixel Relay tree reset", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       destination_root: "/sdcard/DCIM/Camera/PixelRelay",

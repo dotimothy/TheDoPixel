@@ -432,6 +432,16 @@ class SafeAdb:
             check=check,
         )
 
+    async def advanced_shell(self, command: str, *, timeout: int = 30) -> CommandResult:
+        """Run an operator-supplied command only inside the Android shell."""
+        if not command.strip() or "\x00" in command:
+            raise ValueError("ADB shell command cannot be empty or contain a null byte")
+        return await self._run(
+            [*self.selector, "shell", command],
+            timeout=timeout,
+            check=False,
+        )
+
     async def connect(self) -> None:
         if self.connection_mode == "network" and ":" in self.serial:
             await self._run(["connect", self.serial], check=False)

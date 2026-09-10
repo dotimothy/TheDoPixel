@@ -2194,6 +2194,62 @@ function Audit() {
   </>;
 }
 
+function AdbShellConsole({ report }: { report: (message: string, type?: Notice["type"]) => void }) {
+  const [command, setCommand] = useState("getprop ro.product.model");
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{
+    command: string;
+    return_code: number;
+    stdout: string;
+    stderr: string;
+    output_truncated: boolean;
+  } | null>(null);
+  const acknowledged = useRef(false);
+
+  async function execute() {
+    const nextCommand = command.trim();
+    if (!nextCommand || running) return;
+    if (
+      !acknowledged.current
+      && !window.confirm("ADB shell commands can change or erase data on the Pixel. Commands run with Android shell permissions and are recorded in the audit log. Continue?")
+    ) return;
+    acknowledged.current = true;
+    setRunning(true);
+    try {
+      const nextResult = await api.runAdbShell(nextCommand);
+      setResult(nextResult);
+      report(`ADB shell exited with code ${nextResult.return_code}`, nextResult.return_code ? "bad" : "good");
+    } catch (error) {
+      report(error instanceof Error ? error.message : "ADB shell command failed", "bad");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  const combinedOutput = result
+    ? [result.stdout, result.stderr && `STDERR:\n${result.stderr}`].filter(Boolean).join("\n")
+    : "";
+  return <section className="panel setting-card wide-card adb-shell-console">
+    <span className="panel-kicker">ADVANCED DEVICE CONSOLE</span>
+    <h2>ADB shell</h2>
+    <p>Run a command inside Android using the currently selected USB or network ADB connection. Commands time out after 30 seconds and are recorded in the audit log.</p>
+    <label>Android shell command<textarea rows={3} spellCheck={false} value={command} onChange={(event) => setCommand(event.target.value)} onKeyDown={(event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        void execute();
+      }
+    }} /></label>
+    <div className="adb-shell-actions">
+      <small>Press Ctrl/⌘ + Enter to run. Do not paste commands you do not understand.</small>
+      <button type="button" className="primary small" disabled={running || !command.trim()} onClick={() => void execute()}>{running ? "Running…" : "Run command"}</button>
+    </div>
+    {result && <div className={`adb-shell-result ${result.return_code ? "failed" : "complete"}`}>
+      <div><strong>Exit code {result.return_code}</strong>{result.output_truncated && <span>OUTPUT TRUNCATED</span>}<CopyButton text={combinedOutput || "(no output)"} label="Copy output" /></div>
+      <pre>{combinedOutput || "(command completed with no output)"}</pre>
+    </div>}
+  </section>;
+}
+
 function Settings({ report, advanced, appBuild }: { report: (message: string, type?: Notice["type"]) => void; advanced: boolean; appBuild: { version: string; revision?: string | null } | null }) {
   const [settings, setSettings] = useState<RelaySettings | null>(null);
   const [draft, setDraft] = useState<RelaySettings | null>(null);
@@ -2400,6 +2456,7 @@ function Settings({ report, advanced, appBuild }: { report: (message: string, ty
           report={report}
         />
         {advanced && <PixelStorageManager report={report} />}
+        {advanced && <AdbShellConsole report={report} />}
       </div>
     </form>
     {serverBrowserOpen && <ServerDirectoryBrowser

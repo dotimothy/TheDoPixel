@@ -592,6 +592,16 @@ main { min-width: 0; }
 .wide-card { grid-column: 1 / -1; }
 .uuid-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 18px; }
 .setting-card code { color: #9bb3ba; font: 9px "DM Mono"; }
+.adb-shell-console textarea { width: 100%; min-height: 84px; margin-top: 7px; resize: vertical; border: 1px solid #30434e; border-radius: 7px; padding: 11px; background: #081218; color: #b9e7df; font: 11px/1.55 "DM Mono" !important; }
+.adb-shell-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.adb-shell-actions small { color: #71838c; font-size: 8px; }
+.adb-shell-result { margin-top: 14px; overflow: hidden; border: 1px solid #315149; border-radius: 8px; background: #07110f; }
+.adb-shell-result.failed { border-color: #713c3c; background: #1b1012; }
+.adb-shell-result > div { display: flex; align-items: center; gap: 9px; padding: 9px 11px; border-bottom: 1px solid #243a35; }
+.adb-shell-result strong { font-size: 9px; }
+.adb-shell-result span { color: var(--amber); font: 7px "DM Mono"; }
+.adb-shell-result .copy-error { margin-left: auto; }
+.adb-shell-result pre { max-height: 360px; margin: 0; overflow: auto; padding: 13px; color: #a9d7cf; font: 10px/1.55 "DM Mono"; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .storage-selector { min-height: 0; }
 .storage-selector-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .storage-selector-head h2 { margin-bottom: 0; }
@@ -816,6 +826,8 @@ main { min-width: 0; }
   .network-panel { grid-template-columns: 1fr; }
   .network-panel-head { border-right: 0; border-bottom: 1px solid var(--line); }
   .overview-columns, .settings-grid { grid-template-columns: 1fr; }
+  .adb-shell-actions { align-items: stretch; flex-direction: column; }
+  .adb-shell-actions .primary { width: 100%; }
   .storage-quick-choice { grid-template-columns: 1fr; align-items: stretch; }
   .storage-choice-list { grid-template-columns: 1fr; }
   .storage-medium-facts { grid-template-columns: 1fr 1fr; }

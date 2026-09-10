@@ -495,6 +495,9 @@ class DeviceTransport:
     async def restart_server(self) -> dict[str, Any]:
         return await self.control.restart_server()
 
+    async def advanced_shell(self, command: str, *, timeout: int = 30):
+        return await self.control.advanced_shell(command, timeout=timeout)
+
     async def speed_test(self) -> dict[str, Any]:
         return await self.control.speed_test()
 

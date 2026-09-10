@@ -553,6 +553,29 @@ async def test_restart_adb_server_uses_only_fixed_host_commands(
     ]
 
 
+async def test_advanced_shell_sends_raw_command_only_to_android(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    adb = SafeAdb(Settings(data_dir=tmp_path, connection_mode="usb"))
+    calls: list[tuple[list[str], dict]] = []
+
+    async def run(args: list[str], **kwargs) -> CommandResult:
+        calls.append((args, kwargs))
+        return CommandResult(0, "Pixel", "")
+
+    monkeypatch.setattr(adb, "_run", run)
+
+    result = await adb.advanced_shell("getprop ro.product.model | head -1", timeout=12)
+
+    assert result.stdout == "Pixel"
+    assert calls == [
+        (
+            ["-d", "shell", "getprop ro.product.model | head -1"],
+            {"timeout": 12, "check": False},
+        )
+    ]
+
+
 async def test_internal_storage_is_ready_without_an_adopted_uuid(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -107,6 +107,17 @@ export const api = {
       start_output?: string | null;
       device: Device;
     }>("/device/adb-server/restart", { method: "POST" }),
+  runAdbShell: (command: string, timeoutSeconds = 30) =>
+    request<{
+      command: string;
+      return_code: number;
+      stdout: string;
+      stderr: string;
+      output_truncated: boolean;
+    }>("/device/adb-shell", {
+      method: "POST",
+      body: JSON.stringify({ command, timeout_seconds: timeoutSeconds })
+    }),
   adbSpeedTest: () =>
     request<AdbSpeedTestResult>("/device/adb-speed-test", { method: "POST" }),
   ftpConnectionTest: (settings: {

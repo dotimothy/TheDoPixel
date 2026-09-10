@@ -52,6 +52,11 @@ class AdbTcpipRequest(BaseModel):
     port: int = Field(default=5555, ge=1, le=65535)
 
 
+class AdbShellRequest(BaseModel):
+    command: str = Field(min_length=1, max_length=4096)
+    timeout_seconds: int = Field(default=30, ge=1, le=60)
+
+
 class StorageAdoptRequest(BaseModel):
     disk_id: str = Field(pattern=r"^disk:\d+,\d+$", max_length=64)
     force_adoptable: bool = False

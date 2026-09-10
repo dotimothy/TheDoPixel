@@ -52,6 +52,7 @@ from .database import Database
 from .events import EventBroker
 from .files import atomic_upload, is_macos_metadata, local_path
 from .models import (
+    AdbShellRequest,
     AdbTcpipRequest,
     BatchCancelRequest,
     BatchCreate,
@@ -1660,6 +1661,53 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         await events.publish("device", {"action": "adb_server_restarted"})
         return result
+
+    @router.post("/device/adb-shell")
+    async def run_adb_shell(payload: AdbShellRequest, user: MutatingUser) -> dict:
+        if worker.active_batch_id or worker.maintenance_reason:
+            raise DomainError(
+                "device_busy",
+                "Wait for active Pixel work to finish before using the ADB shell",
+                status_code=409,
+            )
+        command = payload.command.strip()
+        if not command or "\x00" in command:
+            raise DomainError("invalid_adb_command", "ADB shell command is empty")
+        try:
+            result = await adb.advanced_shell(command, timeout=payload.timeout_seconds)
+        except (AdbError, ValueError) as exc:
+            raise DomainError(
+                getattr(exc, "code", "invalid_adb_command"), str(exc), status_code=409
+            ) from exc
+
+        output_limit = 128 * 1024
+
+        def bounded(value: str) -> tuple[str, bool]:
+            if len(value) <= output_limit:
+                return value, False
+            return f"{value[:output_limit]}\n… output truncated by TheDoPixel", True
+
+        stdout, stdout_truncated = bounded(result.stdout)
+        stderr, stderr_truncated = bounded(result.stderr)
+        db.audit(
+            "device.adb_shell",
+            "device",
+            settings.device_serial if settings.connection_mode in {"network", "ftp"} else "USB",
+            user["user_id"],
+            {
+                "command": command,
+                "timeout_seconds": payload.timeout_seconds,
+                "return_code": result.returncode,
+                "output_truncated": stdout_truncated or stderr_truncated,
+            },
+        )
+        return {
+            "command": command,
+            "return_code": result.returncode,
+            "stdout": stdout,
+            "stderr": stderr,
+            "output_truncated": stdout_truncated or stderr_truncated,
+        }
 
     @router.post("/device/adb-speed-test")
     async def adb_speed_test(user: MutatingUser) -> dict:
