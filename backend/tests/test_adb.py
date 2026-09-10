@@ -8,8 +8,10 @@ from pixel_relay.adb import (
     DeviceSnapshot,
     SafeAdb,
     ipv4_first,
+    locked_android_user_guidance,
     output_preview,
     parse_adb_progress,
+    parse_android_users,
     parse_battery,
     parse_connectivity,
     parse_df,
@@ -270,6 +272,27 @@ def test_primary_storage_failure_explains_locked_android_user() -> None:
     assert "Work Profile" in guidance
     assert "Private Space" in guidance
     assert "home screen" in guidance
+
+
+def test_android_user_parser_and_locked_profile_guidance() -> None:
+    users = parse_android_users(
+        """
+        Users:
+          UserInfo{0:null:13} serialNo=0
+            State: RUNNING_UNLOCKED
+          UserInfo{10:Work profile:b0} serialNo=10
+            State: -1
+        """
+    )
+
+    assert users == [
+        {"user_id": 0, "name": "Owner", "state": "RUNNING_UNLOCKED"},
+        {"user_id": 10, "name": "Work profile", "state": "-1"},
+    ]
+    guidance = locked_android_user_guidance(users)
+    assert guidance is not None
+    assert "Work profile (user 10, stopped)" in guidance
+    assert "Turn on Work apps" in guidance
 
 
 def test_shared_storage_guidance_prioritizes_locked_user() -> None:
@@ -795,6 +818,7 @@ async def test_primary_storage_switch_moves_sdcard_back_to_internal(
     result = await adb.switch_primary_storage("", progress=progress)
 
     assert calls == [
+        (("dumpsys", "user"), None),
         (("pm", "move-primary-storage", "internal"), 60 * 60),
     ]
     assert result["previous_uuid"] == adopted_uuid
@@ -833,6 +857,42 @@ async def test_primary_storage_switch_keeps_locked_profile_detail_separate(
     assert "Work Profile or Private Space" in str(raised.value)
     assert "ADB detail" not in str(raised.value)
     assert raised.value.output == "Failure [-10]"
+
+
+async def test_primary_storage_switch_stops_before_move_for_locked_work_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adb = SafeAdb(Settings(data_dir=tmp_path, connection_mode="usb"))
+    calls: list[tuple[str, ...]] = []
+
+    async def storage_devices() -> dict:
+        return {
+            "disks": [],
+            "volumes": [],
+            "current_primary_uuid": "adopted-uuid",
+        }
+
+    async def shell(*args: str, **_kwargs) -> CommandResult:
+        calls.append(args)
+        return CommandResult(
+            0,
+            """
+            UserInfo{0:null:13}
+              State: RUNNING_UNLOCKED
+            UserInfo{10:Work profile:b0}
+              State: -1
+            """,
+            "",
+        )
+
+    monkeypatch.setattr(adb, "storage_devices", storage_devices)
+    monkeypatch.setattr(adb, "shell", shell)
+
+    with pytest.raises(AdbError, match=r"Work profile \(user 10, stopped\)"):
+        await adb.switch_primary_storage("")
+
+    assert calls == [("dumpsys", "user")]
 
 
 async def test_primary_storage_switch_rejects_unmounted_or_nonphysical_uuid(

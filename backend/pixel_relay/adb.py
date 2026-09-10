@@ -24,6 +24,8 @@ SAFE_UUID = re.compile(r"^[A-Za-z0-9._-]*$")
 SAFE_DISK_ID = re.compile(r"^disk:\d+,\d+$")
 SAFE_PHYSICAL_VOLUME_ID = re.compile(r"^(?:public|private|stub):\d+,\d+$")
 SAFE_BATCH_DIRECTORY_NAME = re.compile(r"^[0-9a-f]{32}$")
+ANDROID_USER_INFO = re.compile(r"^\s*UserInfo\{(\d+):([^:}]*):[^}]*\}")
+ANDROID_USER_STATE = re.compile(r"^\s*State:\s*(\S+)")
 
 
 def validate_generated_batch_directory(path: str, destination_root: str) -> str:
@@ -81,6 +83,45 @@ def primary_storage_move_guidance(output: str) -> str:
         code,
         "Keep the Pixel unlocked, verify the selected drive is mounted, and check "
         "available space before retrying.",
+    )
+
+
+def parse_android_users(output: str) -> list[dict[str, Any]]:
+    """Extract user/profile lock state from ``dumpsys user`` output."""
+    users: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    for line in output.splitlines():
+        info = ANDROID_USER_INFO.match(line)
+        if info:
+            name = info.group(2).strip()
+            current = {
+                "user_id": int(info.group(1)),
+                "name": name if name and name.lower() != "null" else "Owner",
+                "state": None,
+            }
+            users.append(current)
+            continue
+        state = ANDROID_USER_STATE.match(line)
+        if current is not None and state:
+            current["state"] = state.group(1).upper()
+    return users
+
+
+def locked_android_user_guidance(users: list[dict[str, Any]]) -> str | None:
+    """Describe profiles that prevent Android primary-storage migration."""
+    blocked = [user for user in users if user.get("state") != "RUNNING_UNLOCKED"]
+    if not blocked:
+        return None
+    labels = []
+    for user in blocked:
+        state = str(user.get("state") or "unknown")
+        state_label = "stopped" if state == "-1" else state.lower().replace("_", " ")
+        labels.append(f"{user['name']} (user {user['user_id']}, {state_label})")
+    return (
+        "Android requires every user and profile to be running and unlocked before "
+        f"moving shared storage. Blocking: {', '.join(labels)}. Turn on Work apps or "
+        "the named profile, unlock it if prompted, keep the Owner home screen unlocked, "
+        "then retry the migration."
     )
 
 
@@ -1041,6 +1082,11 @@ class SafeAdb:
                 "changed": False,
                 "storage": before,
             }
+
+        users_result = await self.shell("dumpsys", "user", check=False)
+        user_guidance = locked_android_user_guidance(parse_android_users(users_result.stdout))
+        if users_result.returncode == 0 and user_guidance:
+            raise AdbError(user_guidance)
 
         target_argument = target_uuid or "internal"
         target_label = f"adopted storage {target_uuid}" if target_uuid else "phone internal storage"
