@@ -180,6 +180,21 @@ def run_local_command(command: list[str], *, cwd: Path) -> subprocess.CompletedP
     )
 
 
+def maintenance_command_context(root: Path, git: str) -> tuple[Path, list[str]]:
+    """Avoid cmd.exe's inability to use a UNC path as its working directory."""
+    root_text = str(root)
+    if sys.platform != "win32" or not root_text.startswith((r"\\", "//")):
+        return root, [git]
+
+    local_cwd = Path(
+        os.environ.get("SYSTEMROOT")
+        or os.environ.get("TEMP")
+        or os.environ.get("USERPROFILE")
+        or r"C:\Windows"
+    )
+    return local_cwd, [git, "-C", root_text]
+
+
 def application_revision() -> str | None:
     git = maintenance_tool("git")
     if not git:
@@ -2283,8 +2298,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "Git was not found. Install Git or GitHub Desktop, then restart TheDoPixel.",
                 status_code=409,
             )
+        command_cwd, git_command = maintenance_command_context(root, git)
         try:
-            status = run_local_command([git, "status", "--porcelain"], cwd=root)
+            status = run_local_command(
+                [*git_command, "status", "--porcelain"], cwd=command_cwd
+            )
         except OSError as exc:
             raise DomainError(
                 "app_update_command_failed",
@@ -2304,7 +2322,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=409,
             )
         try:
-            result = run_local_command([git, "pull", "--ff-only"], cwd=root)
+            result = run_local_command(
+                [*git_command, "pull", "--ff-only"], cwd=command_cwd
+            )
         except OSError as exc:
             raise DomainError(
                 "app_update_command_failed",
@@ -2333,7 +2353,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ]
         for command in commands:
             try:
-                installed = run_local_command(command, cwd=root)
+                installed = run_local_command(command, cwd=command_cwd)
             except OSError as exc:
                 raise DomainError(
                     "app_update_command_failed",

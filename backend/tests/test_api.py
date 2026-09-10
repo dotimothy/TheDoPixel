@@ -193,6 +193,23 @@ def test_windows_command_launchers_use_cmd_exe(tmp_path: Path, monkeypatch) -> N
     )
 
 
+def test_windows_network_checkout_uses_local_cwd_and_git_dash_c(monkeypatch) -> None:
+    monkeypatch.setattr(api_module.sys, "platform", "win32")
+    monkeypatch.setenv("SYSTEMROOT", r"C:\Windows")
+
+    cwd, git_command = api_module.maintenance_command_context(
+        Path(r"\\nas\photos\TheDoPixel"),
+        r"C:\GitHubDesktop\git.exe",
+    )
+
+    assert str(cwd) == r"C:\Windows"
+    assert git_command == [
+        r"C:\GitHubDesktop\git.exe",
+        "-C",
+        r"\\nas\photos\TheDoPixel",
+    ]
+
+
 def test_windows_finds_git_bundled_with_github_desktop(
     tmp_path: Path,
     monkeypatch,
