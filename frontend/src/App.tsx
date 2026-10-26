@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError } from "./api";
 import { batchProgress, bytes, dateTime, duration, googlePhotosBatchDateSearch, label, mediaScanProgress, parentFolderName, pathBaseName, relativeTime, shortPath, sourceRelativeFolder, storageUtilization } from "./format";
 import { Icons } from "./Icons";
@@ -1856,29 +1856,34 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
     (file) => availableRootIds.has(file.root_id) && !excludedBatchSources.has(file.root_id)
   );
   const eligibleFiles = includedFiles.filter((file) => !(file.active_item_count || 0));
-  const rootsById = new Map(roots.map((root) => [root.id, root]));
-  const filesByFolder = new Map<string, SourceFile[]>();
-  for (const file of eligibleFiles) {
-    const root = rootsById.get(file.root_id);
-    if (!root) continue;
-    const containingFolder = sourceRelativeFolder(file.path, root.path);
-    const folderParts = containingFolder === "." ? [] : containingFolder.split("/");
-    const selectableFolders = folderParts.length
-      ? folderParts.map((_part, index) => folderParts.slice(0, index + 1).join("/"))
-      : ["."];
-    for (const folder of selectableFolders) {
-      const key = `${file.root_id}:${folder}`;
-      filesByFolder.set(key, [...(filesByFolder.get(key) || []), file]);
+  const allFolderGroups = useMemo(() => {
+    const rootsById = new Map(roots.map((root) => [root.id, root]));
+    const filesByFolder = new Map<string, SourceFile[]>();
+    for (const file of files) {
+      const root = rootsById.get(file.root_id);
+      if (!root?.available || file.active_item_count) continue;
+      const containingFolder = sourceRelativeFolder(file.path, root.path);
+      const folderParts = containingFolder === "." ? [] : containingFolder.split("/");
+      const selectableFolders = folderParts.length
+        ? folderParts.map((_part, index) => folderParts.slice(0, index + 1).join("/"))
+        : ["."];
+      for (const folder of selectableFolders) {
+        const key = `${file.root_id}:${folder}`;
+        const folderFiles = filesByFolder.get(key);
+        if (folderFiles) folderFiles.push(file);
+        else filesByFolder.set(key, [file]);
+      }
     }
-  }
-  const folderGroups = [...filesByFolder.entries()]
-    .map(([key, folderFiles]) => ({
-      key,
-      files: folderFiles,
-      root: rootsById.get(folderFiles[0].root_id)!,
-      folder: key.slice(key.indexOf(":") + 1)
-    }))
-    .sort((left, right) => `${left.root.name}/${left.folder}`.localeCompare(`${right.root.name}/${right.folder}`));
+    return [...filesByFolder.entries()]
+      .map(([key, folderFiles]) => ({
+        key,
+        files: folderFiles,
+        root: rootsById.get(folderFiles[0].root_id)!,
+        folder: key.slice(key.indexOf(":") + 1)
+      }))
+      .sort((left, right) => `${left.root.name}/${left.folder}`.localeCompare(`${right.root.name}/${right.folder}`));
+  }, [files, roots]);
+  const folderGroups = allFolderGroups.filter((group) => !excludedBatchSources.has(group.root.id));
   const activeFileCount = includedFiles.length - eligibleFiles.length;
   const matchesMediaFilter = (file: SourceFile) => mediaFilter === "all"
     || (mediaFilter === "raw" && isRaw(file))
@@ -2098,7 +2103,7 @@ function Sources({ report }: { report: (message: string, type?: Notice["type"]) 
               })}
             </div>
           </div>}
-          <div className="history-filter advanced-only" role="group" aria-label="Transfer history">
+          <div className="history-filter" role="group" aria-label="Transfer history">
             <span>History</span>
             <button type="button" className={historyFilter === "all" ? "active" : ""} onClick={() => { setHistoryFilter("all"); setVisibleFileLimit(sourceFileRenderChunk); }}>All <b>{mediaEligibleFiles.length.toLocaleString()}</b></button>
             <button type="button" className={historyFilter === "new" ? "active" : ""} onClick={() => { setHistoryFilter("new"); setVisibleFileLimit(sourceFileRenderChunk); }}>Never batched <b>{newCount.toLocaleString()}</b></button>
