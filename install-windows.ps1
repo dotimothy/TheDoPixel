@@ -75,8 +75,10 @@ if (-not $SkipAdb) {
     if (-not $adb) { throw "Android Platform Tools were installed but adb.exe could not be found. Open a new PowerShell window and rerun this script." }
 }
 
-Write-Host "Creating the Python environment..." -ForegroundColor Cyan
-& $uv sync --frozen
+# Keep this version in sync with pixel-relay.ps1. Newer system Pythons may
+# require source builds for locked native dependencies such as httptools.
+Write-Host "Creating the Python 3.13 environment (downloaded by uv if needed)..." -ForegroundColor Cyan
+& $uv sync --frozen --python 3.13
 if ($LASTEXITCODE -ne 0) { throw "Python environment setup failed with exit code $LASTEXITCODE" }
 
 Write-Host "Installing and building the dashboard..." -ForegroundColor Cyan

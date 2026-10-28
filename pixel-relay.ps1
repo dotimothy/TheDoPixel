@@ -45,5 +45,6 @@ if (-not (Test-Path -LiteralPath (Join-Path $ProjectDir "frontend\dist\index.htm
     if ($LASTEXITCODE -ne 0) { throw "Dashboard build failed with exit code $LASTEXITCODE" }
 }
 
-& $uv run --project $ProjectDir pixel-relay-cli @RelayArguments
+# Match the installer so startup also repairs an incompatible existing .venv.
+& $uv run --frozen --python 3.13 --project $ProjectDir pixel-relay-cli @RelayArguments
 exit $LASTEXITCODE

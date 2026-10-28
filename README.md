@@ -18,9 +18,15 @@ install-windows.bat
 ```
 
 The installer adds missing prerequisites through WinGet (`uv`, Node.js LTS, and
-Google Android Platform Tools), creates the locked Python environment, builds the
+Google Android Platform Tools), creates the locked Python 3.13 environment, builds the
 dashboard, and starts TheDoPixel. The first start prompts you to create the local
 administrator.
+
+Python 3.13 is downloaded automatically by `uv` if needed. The Windows installer
+and launcher explicitly select it because the locked native dependencies,
+including `httptools`, do not include Python 3.15 Windows wheels. If a previous
+installation failed while building `httptools` with Python 3.15, rerun
+`install-windows.bat`; `uv` replaces the incompatible `.venv` automatically.
 
 After installation, start it by double-clicking `pixel-relay.cmd` or running:
 
